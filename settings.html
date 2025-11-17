@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule State Configuration</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>Schedule State Configuration</h1>
+            <nav>
+                <a href="index.html" class="nav-link">Dashboard</a>
+                <a href="settings.html" class="nav-link active">Settings</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="settings-section">
+            <h2>Manage Schedule States</h2>
+            <p class="settings-description">
+                Define schedule states that appear in your CSV files. Configure whether each state is paid, 
+                its category, and whether it should be shown by default on the dashboard.
+            </p>
+
+            <div class="state-form-container">
+                <form id="stateForm" class="state-form">
+                    <div class="form-group">
+                        <label for="stateName">State Name *</label>
+                        <input type="text" id="stateName" required placeholder="e.g., Break, Meeting, Work">
+                        <small>This must match exactly as it appears in the CSV file</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="stateCategory">Category *</label>
+                        <select id="stateCategory" required>
+                            <option value="">Select Category</option>
+                            <option value="Break">Break</option>
+                            <option value="Meeting">Meeting</option>
+                            <option value="Work">Work</option>
+                            <option value="Time Off">Time Off</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="isPaid">Paid Status</label>
+                        <select id="isPaid" required>
+                            <option value="true">Paid</option>
+                            <option value="false">Unpaid</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="isDefault">
+                            <span>Show by default on dashboard</span>
+                        </label>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="saveStateBtn">Save State</button>
+                        <button type="button" class="btn btn-secondary" id="cancelEditBtn" style="display: none;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="states-list-container">
+                <h3>Configured States</h3>
+                <div id="statesList" class="states-list">
+                    <!-- Dynamic state cards will be inserted here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2025 Workforce Management Dashboard</p>
+        </div>
+    </footer>
+
+    <script src="js/stateConfig.js"></script>
+    <script>
+        // Settings page specific script
+        let editingStateId = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('stateForm');
+            const statesList = document.getElementById('statesList');
+            const cancelBtn = document.getElementById('cancelEditBtn');
+
+            function renderStates() {
+                const states = StateConfig.getAllStates();
+                statesList.innerHTML = '';
+
+                if (states.length === 0) {
+                    statesList.innerHTML = '<p class="no-states">No states configured yet. Add your first state above.</p>';
+                    return;
+                }
+
+                states.forEach(state => {
+                    const card = document.createElement('div');
+                    card.className = 'state-card';
+                    card.innerHTML = `
+                        <div class="state-card-header">
+                            <h4>${state.name}</h4>
+                            <div class="state-badges">
+                                <span class="badge badge-category">${state.category}</span>
+                                <span class="badge ${state.isPaid ? 'badge-paid' : 'badge-unpaid'}">
+                                    ${state.isPaid ? 'Paid' : 'Unpaid'}
+                                </span>
+                                ${state.isDefault ? '<span class="badge badge-default">Default</span>' : ''}
+                            </div>
+                        </div>
+                        <div class="state-card-actions">
+                            <button class="btn btn-small btn-edit" data-id="${state.id}">Edit</button>
+                            <button class="btn btn-small btn-delete" data-id="${state.id}">Delete</button>
+                        </div>
+                    `;
+                    statesList.appendChild(card);
+                });
+
+                // Add event listeners
+                document.querySelectorAll('.btn-edit').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const stateId = this.getAttribute('data-id');
+                        editState(stateId);
+                    });
+                });
+
+                document.querySelectorAll('.btn-delete').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const stateId = this.getAttribute('data-id');
+                        if (confirm('Are you sure you want to delete this state?')) {
+                            StateConfig.deleteState(stateId);
+                            renderStates();
+                        }
+                    });
+                });
+            }
+
+            function editState(stateId) {
+                const state = StateConfig.getState(stateId);
+                if (!state) return;
+
+                editingStateId = stateId;
+                document.getElementById('stateName').value = state.name;
+                document.getElementById('stateCategory').value = state.category;
+                document.getElementById('isPaid').value = state.isPaid.toString();
+                document.getElementById('isDefault').checked = state.isDefault;
+                document.getElementById('saveStateBtn').textContent = 'Update State';
+                cancelBtn.style.display = 'inline-block';
+                document.getElementById('stateName').focus();
+            }
+
+            function resetForm() {
+                editingStateId = null;
+                form.reset();
+                document.getElementById('saveStateBtn').textContent = 'Save State';
+                cancelBtn.style.display = 'none';
+            }
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const stateData = {
+                    name: document.getElementById('stateName').value.trim(),
+                    category: document.getElementById('stateCategory').value,
+                    isPaid: document.getElementById('isPaid').value === 'true',
+                    isDefault: document.getElementById('isDefault').checked
+                };
+
+                if (editingStateId) {
+                    StateConfig.updateState(editingStateId, stateData);
+                } else {
+                    StateConfig.addState(stateData);
+                }
+
+                resetForm();
+                renderStates();
+            });
+
+            cancelBtn.addEventListener('click', resetForm);
+
+            // Initial render
+            renderStates();
+        });
+    </script>
+</body>
+</html>
+

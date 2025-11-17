@@ -1,0 +1,21 @@
+schedule file structure - 
+
+Column A - "Site" - This column has site name where agents are based this is mostly text but could be alpha numeric
+
+Column B - "Time zone" - This shows time zone of the time mentioned in the file entries ( It could be "Asia/Kolkata", "America/New_York" representing IST and EST, it might have any other time zone so our system should be able to identify and use data accordingly)
+
+Columnc C - "Team" - This column has two pieces of information clubbed together, team name with leader name separated with "-" and the first word is the team name and afterwards it is team leader and their details, our system should be able to use delimit feature to remove anything which is after "-" and it should also remove the "-" only keeping the name of the team.
+
+Column D - "Agent" - It has the name of the agent or colleague
+
+Column E - "Date" - It has date in "MM/DD/YYYY" Format
+
+Column F - "Schedule State" - it means what is the schedule state in the schedule, this is very important part of the file it tells us about the state of the agent i.e "Break","Meeeting" or "Work" this field should be very dynamic in our tool to read the state name that we will total to calculate the total of that state, we have many state names and what that state represents has to be defined so our tool should have a system where i can define what is the name of the state, is it paid, is it off the phone activity, is it break, our system should be advanced enough to be updated with these details so that the dashboard will show the information correctly.
+
+Column G - "Start Time" - This column has start time in the format "12:30:00 AM" which shows time when a state starts, showed in full time format.
+
+Column H - "End Time" - This column has end time in the format "12:30:00 AM" which shows time when a state ends, showed in full time format.
+
+Column I - "Duration" - This column has duration of an employee's schedule state in the format "12:30:00 AM" which shows duration of a particular state, showed in full time format.
+
+Column J - "Paid Hours" - This column has information about the duration if it is paid or not of an employee's schedule state in the format "12:30:00 AM" which shows paid duration of a particular state, showed in full time format.

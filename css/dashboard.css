@@ -1,0 +1,410 @@
+/* Dashboard Specific Styles */
+
+/* Controls Section */
+.controls-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.date-selector-container {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.date-selector-container label {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.date-input {
+    padding: 0.625rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+}
+
+.file-upload-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.file-upload-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.file-upload-group label {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.file-input {
+    padding: 0.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.file-name {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    display: block;
+    margin-top: 0.25rem;
+}
+
+.file-help {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.file-help code {
+    background-color: var(--background);
+    padding: 0.125rem 0.25rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-family: 'Courier New', monospace;
+}
+
+.state-filter-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.state-filter-container label {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.state-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 1rem;
+    background-color: var(--background);
+    border-radius: var(--radius-sm);
+}
+
+.state-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.state-filter-item input[type="checkbox"] {
+    width: auto;
+    cursor: pointer;
+}
+
+.state-filter-item label {
+    font-weight: normal;
+    cursor: pointer;
+    margin: 0;
+}
+
+/* Dashboard Section */
+.dashboard-section {
+    overflow-x: auto;
+}
+
+.dashboard-header {
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.dashboard-header h2 {
+    margin: 0;
+}
+
+.summary-stats {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.stat-card {
+    background-color: var(--background);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+.stat-card .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.stat-card .stat-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dashboard-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    min-width: 1200px;
+}
+
+.schedule-column {
+    background-color: var(--background);
+    border-radius: var(--radius);
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.column-title {
+    text-align: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--primary-color);
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+.table-container {
+    overflow-x: auto;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+    background-color: var(--surface);
+}
+
+.schedule-table thead {
+    position: sticky;
+    top: 0;
+    background-color: var(--primary-color);
+    color: white;
+    z-index: 10;
+}
+
+.schedule-table th {
+    padding: 0.75rem 0.5rem;
+    text-align: left;
+    font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    white-space: nowrap;
+}
+
+.schedule-table th:first-child {
+    position: sticky;
+    left: 0;
+    background-color: var(--primary-color);
+    z-index: 11;
+    min-width: 80px;
+}
+
+.schedule-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.2s;
+}
+
+.schedule-table tbody tr:hover {
+    background-color: var(--background);
+}
+
+.schedule-table td {
+    padding: 0.625rem 0.5rem;
+    border: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.schedule-table td:first-child {
+    position: sticky;
+    left: 0;
+    background-color: var(--surface);
+    z-index: 5;
+    font-weight: 500;
+    text-align: left;
+    min-width: 80px;
+}
+
+.schedule-table tbody tr:hover td:first-child {
+    background-color: var(--background);
+}
+
+.state-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 100px;
+}
+
+.state-duration {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.state-count {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.interval-time {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+/* Settings Page Styles */
+.settings-section {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.settings-description {
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+    line-height: 1.8;
+}
+
+.state-form-container {
+    background-color: var(--background);
+    padding: 1.5rem;
+    border-radius: var(--radius);
+    margin-bottom: 2rem;
+    border: 1px solid var(--border-color);
+}
+
+.state-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: end;
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.states-list-container {
+    margin-top: 2rem;
+}
+
+.states-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.state-card {
+    background-color: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    transition: box-shadow 0.2s;
+}
+
+.state-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.state-card-header {
+    margin-bottom: 1rem;
+}
+
+.state-card-header h4 {
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+    font-size: 1.125rem;
+}
+
+.state-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.state-card-actions {
+    display: flex;
+    gap: 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.no-states {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+/* Responsive Dashboard */
+@media (max-width: 1400px) {
+    .dashboard-container {
+        grid-template-columns: 1fr;
+        min-width: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-container {
+        grid-template-columns: 1fr;
+    }
+
+    .state-form {
+        grid-template-columns: 1fr;
+    }
+
+    .states-list {
+        grid-template-columns: 1fr;
+    }
+
+    .file-upload-container {
+        grid-template-columns: 1fr;
+    }
+
+    .date-selector-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .date-selector-container > * {
+        width: 100%;
+    }
+}
+
+/* Scrollbar Styling */
+.table-container::-webkit-scrollbar,
+.dashboard-section::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+}
+
+.table-container::-webkit-scrollbar-track,
+.dashboard-section::-webkit-scrollbar-track {
+    background: var(--background);
+}
+
+.table-container::-webkit-scrollbar-thumb,
+.dashboard-section::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover,
+.dashboard-section::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-color);
+}
+

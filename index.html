@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workforce Schedule Dashboard</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>Workforce Schedule Dashboard</h1>
+            <nav>
+                <a href="index.html" class="nav-link active">Dashboard</a>
+                <a href="settings.html" class="nav-link">Settings</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="controls-section">
+            <div class="date-selector-container">
+                <label for="datePicker">Select Date:</label>
+                <input type="date" id="datePicker" class="date-input">
+                <button id="refreshDataBtn" class="btn btn-secondary">Refresh from Data Folder</button>
+                <button id="loadDataBtn" class="btn btn-primary">Upload Files Manually</button>
+            </div>
+            
+            <div class="file-upload-container">
+                <div class="file-upload-group">
+                    <label for="scheduleFile">Previous Schedule File:</label>
+                    <input type="file" id="scheduleFile" accept=".csv" class="file-input">
+                    <span class="file-name" id="scheduleFileName">No file selected</span>
+                    <small class="file-help">Auto-loads from: <code>data/Schedule_MMDDYYYY.csv</code></small>
+                </div>
+                <div class="file-upload-group">
+                    <label for="ariseFile">After Arise Schedule File:</label>
+                    <input type="file" id="ariseFile" accept=".csv" class="file-input">
+                    <span class="file-name" id="ariseFileName">No file selected</span>
+                    <small class="file-help">Auto-loads from: <code>data/Arise_Schedule_MMDDYYYY.csv</code></small>
+                </div>
+            </div>
+
+            <div class="state-filter-container">
+                <label>Filter Schedule States:</label>
+                <div id="stateFilters" class="state-filters">
+                    <!-- Dynamic checkboxes will be inserted here -->
+                </div>
+            </div>
+        </section>
+
+        <section class="loading-section" id="loadingSection" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Processing schedule data...</p>
+        </section>
+
+        <section class="error-section" id="errorSection" style="display: none;">
+            <div class="error-message" id="errorMessage"></div>
+        </section>
+
+        <section class="dashboard-section" id="dashboardSection" style="display: none;">
+            <div class="dashboard-header">
+                <h2>Schedule Comparison</h2>
+                <div class="summary-stats" id="summaryStats"></div>
+            </div>
+            
+            <div class="dashboard-container">
+                <div class="schedule-column">
+                    <h3 class="column-title">Previous Schedule</h3>
+                    <div class="table-container">
+                        <table class="schedule-table" id="previousScheduleTable">
+                            <thead id="previousScheduleHeader"></thead>
+                            <tbody id="previousScheduleBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="schedule-column">
+                    <h3 class="column-title">After Arise Schedule</h3>
+                    <div class="table-container">
+                        <table class="schedule-table" id="ariseScheduleTable">
+                            <thead id="ariseScheduleHeader"></thead>
+                            <tbody id="ariseScheduleBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2025 Workforce Management Dashboard</p>
+        </div>
+    </footer>
+
+    <script src="lib/papaparse.min.js"></script>
+    <script src="js/dateUtils.js"></script>
+    <script src="js/stateConfig.js"></script>
+    <script src="js/csvParser.js"></script>
+    <script src="js/dataProcessor.js"></script>
+    <script src="js/dashboardRenderer.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
+
