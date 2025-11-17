@@ -10,18 +10,41 @@ const DateUtils = {
      * @returns {number} Minutes since midnight (0-1439)
      */
     parseTimeToMinutes(timeStr) {
-        if (!timeStr || timeStr.trim() === '' || timeStr === 'Full Day') {
+        if (!timeStr || typeof timeStr !== 'string') {
+            return null;
+        }
+        
+        const trimmed = timeStr.trim();
+        if (trimmed === '' || trimmed.toUpperCase() === 'FULL DAY') {
             return null;
         }
 
         // Remove extra spaces and normalize
-        let time = timeStr.trim().toUpperCase();
+        let time = trimmed.toUpperCase();
         
-        // Handle formats like "12:30:00 AM" or "4:00 PM"
+        // Handle formats like "12:30:00 AM" or "4:00 PM" or "1:30 PM" or "12:30 PM"
+        // Also handle formats without seconds: "4:00 PM"
         const timePattern = /(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)/i;
         const match = time.match(timePattern);
         
         if (!match) {
+            // Try alternative format without colon (e.g., "400 PM" -> "4:00 PM")
+            const altPattern = /(\d{1,4})\s*(AM|PM)/i;
+            const altMatch = time.match(altPattern);
+            if (altMatch) {
+                let timeNum = parseInt(altMatch[1], 10);
+                const period = altMatch[2].toUpperCase();
+                let hours = Math.floor(timeNum / 100);
+                const minutes = timeNum % 100;
+                
+                if (period === 'PM' && hours !== 12) {
+                    hours += 12;
+                } else if (period === 'AM' && hours === 12) {
+                    hours = 0;
+                }
+                
+                return hours * 60 + minutes;
+            }
             return null;
         }
 

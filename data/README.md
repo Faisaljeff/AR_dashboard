@@ -34,16 +34,20 @@ Your CSV files should have the following columns (in order):
 
 1. **Site** - Site name where agents are based
 2. **Time zone** - Timezone (e.g., "Asia/Kolkata", "America/New_York")
-3. **Team** - Team name (format: "TeamName - LeaderName", system extracts team name before "-")
-4. **Agent** - Agent/employee name
-5. **Date** - Date in MM/DD/YYYY format
-6. **Schedule State** - State name (e.g., "Break", "Meeting", "Work")
-7. **Start Time** - Start time in format "12:30:00 AM" or "4:00 PM"
-8. **End Time** - End time in format "12:30:00 AM" or "4:00 PM"
-9. **Duration** - Duration in format "12:30:00 AM"
-10. **Paid Hours** - Paid duration in format "12:30:00 AM"
+3. **Team** - Team name (can be "TeamName - LeaderName" or just "TeamName")
+4. **Agent** - Agent/employee name (REQUIRED)
+5. **Date** - Date in MM/DD/YYYY format (REQUIRED)
+6. **Schedule State** - State name (e.g., "Break", "Meeting", "Work") (REQUIRED)
+7. **Start Time** - Start time in format "12:30:00 AM" or "4:00 PM" (REQUIRED - rows without this are skipped)
+8. **End Time** - End time in format "12:30:00 AM" or "4:00 PM" (REQUIRED - rows without this are skipped)
+9. **Duration** - Duration in format "12:30:00 AM" (optional)
+10. **Paid Hours** - Paid duration in format "12:30:00 AM" (optional)
 
-**Note:** The Employee ID column has been removed. All columns after Team have shifted left by one position.
+**Important Notes:**
+- The Employee ID column has been removed. All columns after Team have shifted left by one position.
+- **Start Time and End Time are REQUIRED** - rows with empty Start Time or End Time will be skipped from calculations (they cannot be used to determine which intervals to calculate).
+- "Full Day" is a valid value for Start Time/End Time (e.g., for "Day Off" states).
+- If team name contains "-", only the part before "-" is used; otherwise the full team name is used.
 
 ## Example Files
 

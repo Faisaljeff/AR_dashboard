@@ -26,12 +26,20 @@ const DataProcessor = {
 
         // Process each schedule entry
         scheduleData.forEach(entry => {
-            const startMinutes = DateUtils.parseTimeToMinutes(entry.startTime);
-            const endMinutes = DateUtils.parseTimeToMinutes(entry.endTime);
             const stateName = entry.scheduleState;
+            let startMinutes = DateUtils.parseTimeToMinutes(entry.startTime);
+            let endMinutes = DateUtils.parseTimeToMinutes(entry.endTime);
+            
+            // Handle "Full Day" entries - they span the entire day (00:00 to 23:59)
+            if (entry.startTime && entry.startTime.trim().toUpperCase() === 'FULL DAY' ||
+                entry.endTime && entry.endTime.trim().toUpperCase() === 'FULL DAY') {
+                startMinutes = 0; // Start of day
+                endMinutes = 1439; // End of day (23:59)
+            }
 
             if (startMinutes === null || endMinutes === null) {
-                return; // Skip invalid time entries
+                // Skip entries where we can't determine time range
+                return;
             }
 
             // Handle end time that might be next day
