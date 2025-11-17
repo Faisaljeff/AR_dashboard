@@ -7,12 +7,16 @@ const DataProcessor = {
     /**
      * Process schedule data into interval-based format
      * @param {Array} scheduleData - Parsed schedule data from CSV
+     * @param {Date} targetDate - Target date in EST/EDT to filter entries (only include entries that fall on this date after conversion)
      * @returns {Object} Processed data with interval calculations
      */
-    processScheduleData(scheduleData) {
+    processScheduleData(scheduleData, targetDate = null) {
         if (!scheduleData || scheduleData.length === 0) {
+            console.log('DataProcessor: No schedule data provided');
             return this._createEmptyResult();
         }
+
+        console.log(`DataProcessor: Processing ${scheduleData.length} entries, target date:`, targetDate);
 
         const intervals = DateUtils.generateIntervals();
         const stateMap = new Map(); // Map to track state totals
@@ -24,8 +28,21 @@ const DataProcessor = {
             };
         });
 
+        // Normalize target date for comparison (set to midnight EST/EDT)
+        let targetDateEST = null;
+        if (targetDate) {
+            // Create a date object for the target date at midnight in EST/EDT
+            const year = targetDate.getFullYear();
+            const month = targetDate.getMonth();
+            const day = targetDate.getDate();
+            // We'll compare dates by year, month, day
+            targetDateEST = { year, month, day };
+        }
+
         // Process each schedule entry
-        scheduleData.forEach(entry => {
+        let processedCount = 0;
+        let skippedCount = 0;
+        scheduleData.forEach((entry, index) => {
             const stateName = entry.scheduleState;
             let startMinutes = DateUtils.parseTimeToMinutes(entry.startTime);
             let endMinutes = DateUtils.parseTimeToMinutes(entry.endTime);
@@ -39,17 +56,180 @@ const DataProcessor = {
 
             if (startMinutes === null || endMinutes === null) {
                 // Skip entries where we can't determine time range
+                skippedCount++;
+                if (index < 5) {
+                    console.log(`DataProcessor: Skipping entry ${index} - invalid time range:`, entry);
+                }
                 return;
             }
 
-            // Handle end time that might be next day
-            let actualEndMinutes = endMinutes;
-            if (endMinutes < startMinutes) {
-                actualEndMinutes = endMinutes + 1440; // Add 24 hours
+            // Convert times to EST/EDT (America/New_York) if needed
+            // Dashboard always displays in EST/EDT timezone
+            // This conversion properly handles DST (Daylight Saving Time)
+            // AND returns the date in EST/EDT after conversion
+            const sourceTimezone = entry.timezone || 'UTC';
+            const normalizedTz = DateUtils.normalizeTimezone(sourceTimezone);
+            
+            let startDateEST, endDateEST;
+            
+            try {
+                if (normalizedTz !== 'America/New_York') {
+                    // Convert to EST/EDT (handles DST automatically and returns date)
+                    // Use normalized timezone for conversion (handles underscores, aliases, etc.)
+                    const startConversion = DateUtils.convertToESTWithDate(startMinutes, normalizedTz, entry.date);
+                    const endConversion = DateUtils.convertToESTWithDate(endMinutes, normalizedTz, entry.date);
+                    
+                    // Validate conversion results
+                    if (!startConversion || !endConversion || 
+                        typeof startConversion.minutes !== 'number' || 
+                        typeof endConversion.minutes !== 'number' ||
+                        !startConversion.date || !endConversion.date) {
+                        console.warn(`Invalid timezone conversion result for entry:`, entry);
+                        // Fallback: use original times and dates
+                        const entryDate = DateUtils.parseDate(entry.date) || new Date();
+                        startDateEST = entryDate;
+                        endDateEST = entryDate;
+                    } else {
+                        startMinutes = startConversion.minutes;
+                        endMinutes = endConversion.minutes;
+                        startDateEST = startConversion.date;
+                        endDateEST = endConversion.date;
+                    }
+                } else {
+                    // Already in EST/EDT, parse the date
+                    const entryDate = DateUtils.parseDate(entry.date);
+                    startDateEST = entryDate || new Date();
+                    endDateEST = entryDate || new Date();
+                }
+            } catch (error) {
+                console.error(`Error converting timezone "${sourceTimezone}" (normalized: "${normalizedTz}") for entry:`, entry, error);
+                // Fallback: use original times and assume date matches entry date
+                const entryDate = DateUtils.parseDate(entry.date) || new Date();
+                startDateEST = entryDate;
+                endDateEST = entryDate;
             }
 
-            // Update state totals
-            const duration = actualEndMinutes - startMinutes;
+            // Filter by target date if specified
+            // Only include entries that overlap with the target date in EST/EDT
+            // This is critical: after timezone conversion, the date might change
+            // Example: 11:30 PM IST on Nov 15 becomes Nov 16 in EST
+            if (targetDateEST) {
+                // Helper to check if a date matches the target date
+                const dateMatches = (date) => {
+                    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+                        return false;
+                    }
+                    return date.getFullYear() === targetDateEST.year &&
+                           date.getMonth() === targetDateEST.month &&
+                           date.getDate() === targetDateEST.day;
+                };
+                
+                // Also check the original entry date from CSV
+                const entryDate = DateUtils.parseDate(entry.date);
+                const entryDateMatches = entryDate && dateMatches(entryDate);
+                
+                const startDateMatch = dateMatches(startDateEST);
+                const endDateMatch = dateMatches(endDateEST);
+                
+                // Include entry if:
+                // 1. Original entry date matches target date, OR
+                // 2. Start date (after conversion) matches target date, OR
+                // 3. End date (after conversion) matches target date, OR
+                // 4. Entry overlaps with any part of the target date
+                if (!entryDateMatches && !startDateMatch && !endDateMatch) {
+                    // Check if entry overlaps with the target date
+                    const targetDateStart = new Date(targetDateEST.year, targetDateEST.month, targetDateEST.day, 0, 0, 0, 0);
+                    const targetDateEnd = new Date(targetDateEST.year, targetDateEST.month, targetDateEST.day, 23, 59, 59, 999);
+                    
+                    // Create full datetime objects for comparison
+                    // Use the converted dates and times
+                    const startDateTime = new Date(startDateEST);
+                    if (!isNaN(startDateTime.getTime())) {
+                        startDateTime.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
+                    } else {
+                        // Fallback: use target date with converted time
+                        startDateTime.setTime(targetDateStart.getTime());
+                        startDateTime.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
+                    }
+                    
+                    const endDateTime = new Date(endDateEST);
+                    if (!isNaN(endDateTime.getTime())) {
+                        endDateTime.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
+                    } else {
+                        // Fallback: use target date with converted time
+                        endDateTime.setTime(targetDateStart.getTime());
+                        endDateTime.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
+                    }
+                    
+                    // If end is before start, it's next day
+                    if (endMinutes < startMinutes) {
+                        endDateTime.setDate(endDateTime.getDate() + 1);
+                    }
+                    
+                    // Check if entry overlaps with target date
+                    // Entry overlaps if:
+                    // - It starts before target date ends AND ends after target date starts
+                    const overlaps = startDateTime <= targetDateEnd && endDateTime >= targetDateStart;
+                    
+                    if (!overlaps) {
+                        // Entry doesn't overlap with target date, skip it
+                        skippedCount++;
+                        if (index < 5) {
+                            console.log(`DataProcessor: Skipping entry ${index} - doesn't overlap target date:`, {
+                                entryDate: entry.date,
+                                timezone: entry.timezone,
+                                normalizedTz: normalizedTz,
+                                startDateEST: startDateEST,
+                                endDateEST: endDateEST,
+                                startDateTime: startDateTime,
+                                endDateTime: endDateTime,
+                                targetDate: targetDateEST,
+                                targetDateStart: targetDateStart,
+                                targetDateEnd: targetDateEnd
+                            });
+                        }
+                        return;
+                    }
+                }
+            }
+
+            // Clamp times to target date boundaries if filtering by date
+            // This ensures we only count the portion of entries that fall within the selected date
+            let clampedStartMinutes = startMinutes;
+            let clampedEndMinutes = endMinutes;
+            
+            if (targetDateEST) {
+                // Helper to check if a date matches target
+                const dateMatches = (date) => {
+                    return date.getFullYear() === targetDateEST.year &&
+                           date.getMonth() === targetDateEST.month &&
+                           date.getDate() === targetDateEST.day;
+                };
+                
+                // Clamp start time to target date boundaries
+                if (!dateMatches(startDateEST)) {
+                    // Start is before target date, clamp to 00:00
+                    clampedStartMinutes = 0;
+                }
+                
+                // Clamp end time to target date boundaries
+                if (!dateMatches(endDateEST)) {
+                    // End is after target date, clamp to 23:59
+                    clampedEndMinutes = 1439;
+                } else if (endMinutes < startMinutes && dateMatches(startDateEST)) {
+                    // End is next day but start is on target date
+                    clampedEndMinutes = 1439;
+                }
+            }
+
+            // Handle end time that might be next day (for duration calculation)
+            let actualEndMinutes = clampedEndMinutes;
+            if (clampedEndMinutes < clampedStartMinutes) {
+                actualEndMinutes = clampedEndMinutes + 1440; // Add 24 hours
+            }
+
+            // Update state totals (using clamped times for accurate duration on target date)
+            const duration = actualEndMinutes - clampedStartMinutes;
             if (!stateMap.has(stateName)) {
                 stateMap.set(stateName, {
                     totalDuration: 0,
@@ -63,15 +243,21 @@ const DataProcessor = {
             stateStats.totalCount += 1;
 
             // Calculate which intervals this entry overlaps
+            // Use clamped times to ensure we only count overlap within the target date
             intervals.forEach((interval, index) => {
+                // Calculate overlap using clamped times
+                // This ensures entries spanning multiple days only count the portion on the target date
                 const overlap = DateUtils.calculateOverlap(
-                    startMinutes,
+                    clampedStartMinutes,
                     actualEndMinutes,
                     interval.startMinutes,
                     interval.endMinutes
                 );
 
                 if (overlap > 0) {
+                    // Additional check: if we have a target date, verify the interval date matches
+                    // Since intervals are always for the selected date, we just need to ensure
+                    // the entry's time range (after conversion) overlaps with the day
                     const intervalEntry = intervalData[index];
                     if (!intervalEntry.states.has(stateName)) {
                         intervalEntry.states.set(stateName, {
@@ -86,6 +272,10 @@ const DataProcessor = {
                 }
             });
         });
+        
+        console.log(`DataProcessor: Processed ${processedCount} entries, skipped ${skippedCount} entries`);
+        console.log(`DataProcessor: State totals found:`, Array.from(stateMap.keys()));
+        console.log(`DataProcessor: Total unique states:`, stateMap.size);
 
         // Convert Maps to plain objects for serialization
         const processedIntervals = intervalData.map(item => {

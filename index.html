@@ -13,7 +13,6 @@
             <h1>Workforce Schedule Dashboard</h1>
             <nav>
                 <a href="index.html" class="nav-link active">Dashboard</a>
-                <a href="settings.html" class="nav-link">Settings</a>
             </nav>
         </div>
     </header>
@@ -22,7 +21,16 @@
         <section class="controls-section">
             <div class="date-selector-container">
                 <label for="datePicker">Select Date:</label>
-                <input type="date" id="datePicker" class="date-input">
+                <div class="date-navigation">
+                    <button type="button" id="prevDayBtn" class="btn btn-icon" title="Previous Day">
+                        <span style="font-size: 1.2rem;">←</span>
+                    </button>
+                    <input type="date" id="datePicker" class="date-input">
+                    <button type="button" id="nextDayBtn" class="btn btn-icon" title="Next Day">
+                        <span style="font-size: 1.2rem;">→</span>
+                    </button>
+                    <button type="button" id="todayBtn" class="btn btn-secondary" title="Go to Today">Today</button>
+                </div>
                 <button id="refreshDataBtn" class="btn btn-secondary">Refresh from Data Folder</button>
                 <button id="loadDataBtn" class="btn btn-primary">Upload Files Manually</button>
             </div>
@@ -42,12 +50,6 @@
                 </div>
             </div>
 
-            <div class="state-filter-container">
-                <label>Filter Schedule States:</label>
-                <div id="stateFilters" class="state-filters">
-                    <!-- Dynamic checkboxes will be inserted here -->
-                </div>
-            </div>
         </section>
 
         <section class="loading-section" id="loadingSection" style="display: none;">
@@ -59,33 +61,8 @@
             <div class="error-message" id="errorMessage"></div>
         </section>
 
-        <section class="dashboard-section" id="dashboardSection" style="display: none;">
-            <div class="dashboard-header">
-                <h2>Schedule Comparison</h2>
-                <div class="summary-stats" id="summaryStats"></div>
-            </div>
-            
-            <div class="dashboard-container">
-                <div class="schedule-column">
-                    <h3 class="column-title">Previous Schedule</h3>
-                    <div class="table-container">
-                        <table class="schedule-table" id="previousScheduleTable">
-                            <thead id="previousScheduleHeader"></thead>
-                            <tbody id="previousScheduleBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-                
-                <div class="schedule-column">
-                    <h3 class="column-title">After Arise Schedule</h3>
-                    <div class="table-container">
-                        <table class="schedule-table" id="ariseScheduleTable">
-                            <thead id="ariseScheduleHeader"></thead>
-                            <tbody id="ariseScheduleBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+        <section class="dashboards-container" id="dashboardsContainer" style="display: none;">
+            <!-- Multiple dashboards will be dynamically inserted here, one per Schedule State Group -->
         </section>
     </main>
 

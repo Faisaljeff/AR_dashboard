@@ -9,7 +9,6 @@ const App = {
     ariseScheduleData: null,
     processedPrevious: null,
     processedArise: null,
-    selectedStates: [],
 
     /**
      * Initialize the application
@@ -35,9 +34,41 @@ const App = {
      * @private
      */
     _setupEventListeners() {
+        const datePicker = document.getElementById('datePicker');
+        const prevDayBtn = document.getElementById('prevDayBtn');
+        const nextDayBtn = document.getElementById('nextDayBtn');
+        const todayBtn = document.getElementById('todayBtn');
+
         // Date picker
-        document.getElementById('datePicker').addEventListener('change', async (e) => {
+        datePicker.addEventListener('change', async (e) => {
             this.currentDate = new Date(e.target.value);
+            await this._tryLoadStoredData();
+        });
+
+        // Previous day button
+        prevDayBtn.addEventListener('click', async () => {
+            if (!this.currentDate) {
+                this.currentDate = new Date();
+            }
+            this.currentDate.setDate(this.currentDate.getDate() - 1);
+            this._updateDatePicker();
+            await this._tryLoadStoredData();
+        });
+
+        // Next day button
+        nextDayBtn.addEventListener('click', async () => {
+            if (!this.currentDate) {
+                this.currentDate = new Date();
+            }
+            this.currentDate.setDate(this.currentDate.getDate() + 1);
+            this._updateDatePicker();
+            await this._tryLoadStoredData();
+        });
+
+        // Today button
+        todayBtn.addEventListener('click', async () => {
+            this.currentDate = new Date();
+            this._updateDatePicker();
             await this._tryLoadStoredData();
         });
 
@@ -287,51 +318,71 @@ const App = {
      * @private
      */
     _processAndRender() {
+        console.log('App: _processAndRender called');
+        console.log('App: previousScheduleData:', this.previousScheduleData?.length || 0, 'entries');
+        console.log('App: ariseScheduleData:', this.ariseScheduleData?.length || 0, 'entries');
+        
         if (!this.previousScheduleData || !this.ariseScheduleData) {
+            console.warn('App: Missing schedule data, cannot render');
+            DashboardRenderer.showError('Please load schedule data files first.');
             return;
         }
 
-        // Process both datasets
-        this.processedPrevious = DataProcessor.processScheduleData(this.previousScheduleData);
-        this.processedArise = DataProcessor.processScheduleData(this.ariseScheduleData);
+        if (this.previousScheduleData.length === 0 || this.ariseScheduleData.length === 0) {
+            console.warn('App: Empty schedule data');
+            DashboardRenderer.showError('Schedule data files are empty. Please check your CSV files.');
+            return;
+        }
 
-        // Get all unique states
-        const allStates = new Set([
-            ...Object.keys(this.processedPrevious.stateTotals),
-            ...Object.keys(this.processedArise.stateTotals)
-        ]);
+        // Get the target date for filtering (selected date in EST/EDT)
+        // Only include entries that, after timezone conversion, fall on this date
+        const targetDate = this.currentDate || new Date();
+        console.log('App: Target date for filtering:', targetDate);
 
-        // Render state filters
-        DashboardRenderer.renderStateFilters(
-            Array.from(allStates),
-            this.selectedStates,
-            (e) => this._onStateFilterChange(e)
-        );
+        try {
+            // Process both datasets with date filtering
+            // This ensures only entries that belong to the selected date (in EST/EDT) are included
+            console.log('App: Processing previous schedule data...');
+            this.processedPrevious = DataProcessor.processScheduleData(this.previousScheduleData, targetDate);
+            console.log('App: Previous data processed. States found:', Object.keys(this.processedPrevious.stateTotals).length);
+            console.log('App: Previous data state totals:', Object.keys(this.processedPrevious.stateTotals));
+            
+            console.log('App: Processing arise schedule data...');
+            this.processedArise = DataProcessor.processScheduleData(this.ariseScheduleData, targetDate);
+            console.log('App: Arise data processed. States found:', Object.keys(this.processedArise.stateTotals).length);
+            console.log('App: Arise data state totals:', Object.keys(this.processedArise.stateTotals));
 
-        // Render dashboard
-        const statesToShow = this.selectedStates.length > 0 
-            ? this.selectedStates 
-            : null;
-        DashboardRenderer.render(this.processedPrevious, this.processedArise, statesToShow);
-    },
+            // Check if we have any data after processing
+            const hasPreviousData = Object.keys(this.processedPrevious.stateTotals).length > 0;
+            const hasAriseData = Object.keys(this.processedArise.stateTotals).length > 0;
+            
+            if (!hasPreviousData && !hasAriseData) {
+                console.warn('App: No data found after processing. This might be due to strict date filtering.');
+                console.log('App: Previous entries processed:', this.processedPrevious.metadata?.totalEntries || 0);
+                console.log('App: Arise entries processed:', this.processedArise.metadata?.totalEntries || 0);
+                
+                // Try processing without date filter as fallback
+                console.log('App: Attempting to process without date filter...');
+                this.processedPrevious = DataProcessor.processScheduleData(this.previousScheduleData, null);
+                this.processedArise = DataProcessor.processScheduleData(this.ariseScheduleData, null);
+                
+                if (Object.keys(this.processedPrevious.stateTotals).length > 0 || 
+                    Object.keys(this.processedArise.stateTotals).length > 0) {
+                    console.warn('App: Data found without date filter. Date filtering may be too strict.');
+                    DashboardRenderer.showWarning('Data found but may not match selected date. Showing all available data.');
+                } else {
+                    DashboardRenderer.showError('No schedule data found. Please check your CSV files and ensure they contain valid schedule entries.');
+                    return;
+                }
+            }
 
-    /**
-     * Handle state filter change
-     * @private
-     */
-    _onStateFilterChange(e) {
-        const checkboxes = document.querySelectorAll('#stateFilters input[type="checkbox"]');
-        this.selectedStates = Array.from(checkboxes)
-            .filter(cb => cb.checked)
-            .map(cb => cb.value);
-
-        // Re-render dashboard with filtered states
-        if (this.processedPrevious && this.processedArise) {
-            DashboardRenderer.render(
-                this.processedPrevious,
-                this.processedArise,
-                this.selectedStates.length > 0 ? this.selectedStates : null
-            );
+            // Render multiple dashboards (one per visible group)
+            console.log('App: Rendering dashboards...');
+            DashboardRenderer.render(this.processedPrevious, this.processedArise);
+            console.log('App: Dashboard rendering complete');
+        } catch (error) {
+            console.error('App: Error processing data:', error);
+            DashboardRenderer.showError(`Error processing data: ${error.message}`);
         }
     },
 
@@ -345,6 +396,19 @@ const App = {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    },
+
+    /**
+     * Update the date picker input with current date
+     * @private
+     */
+    _updateDatePicker() {
+        if (this.currentDate) {
+            const dateInput = document.getElementById('datePicker');
+            if (dateInput) {
+                dateInput.value = this._formatDateForInput(this.currentDate);
+            }
+        }
     },
 
     /**
