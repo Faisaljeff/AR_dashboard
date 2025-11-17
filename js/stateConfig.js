@@ -104,6 +104,119 @@ const StateConfig = {
     },
 
     /**
+     * Find matching state for a given state name from CSV
+     * First checks for exact match, then checks for keyword matches
+     * @param {string} stateName - State name from CSV (e.g., "break- 10 minutes", "Break 15 Mins / 2:00 - 2:30")
+     * @returns {string} Matching configured state name (e.g., "Break") or original name if no match found
+     */
+    findMatchingState(stateName) {
+        if (!stateName || typeof stateName !== 'string') {
+            return stateName;
+        }
+
+        const normalizedInput = stateName.trim();
+        if (!normalizedInput) {
+            return stateName;
+        }
+
+        const allStates = this.getAllStates();
+        
+        // Step 1: Check for exact match (case-insensitive)
+        const exactMatch = allStates.find(s => 
+            s.name.toLowerCase() === normalizedInput.toLowerCase()
+        );
+        
+        if (exactMatch) {
+            return exactMatch.name; // Return the configured state name (preserves casing)
+        }
+
+        // Step 2: Check for keyword matches
+        // Extract base keywords from state names and check if input contains them
+        const normalizedInputLower = normalizedInput.toLowerCase();
+        
+        // Sort states by name length (longer names first) to match more specific states first
+        // This ensures "Break Time" is checked before "Break"
+        const sortedStates = [...allStates].sort((a, b) => b.name.length - a.name.length);
+        
+        for (const state of sortedStates) {
+            // Extract base words from state name (remove special chars, numbers, etc.)
+            // For "Break", extract ["break"]
+            // For "Break Time", extract ["break", "time", "breaktime"]
+            const baseWords = this._extractBaseWords(state.name);
+            
+            // Check if any base word from the state name appears in the input
+            // Use word boundary matching to avoid false positives (e.g., "breakfast" shouldn't match "Break")
+            for (const word of baseWords) {
+                if (word.length >= 3) {
+                    // Escape special regex characters in the word
+                    const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    
+                    // Create a regex pattern that matches the word as a whole word or after special chars
+                    // This matches "break" in "break- 10 minutes" or "Break 15 Mins"
+                    // Pattern: word at start, or after non-letter, and followed by non-letter or end
+                    const wordPattern = new RegExp(`(^|[^a-z])${escapedWord}([^a-z]|$)`, 'i');
+                    
+                    if (wordPattern.test(normalizedInput)) {
+                        // Found a keyword match
+                        console.log(`State matching: "${stateName}" → "${state.name}" (matched keyword: "${word}")`);
+                        return state.name; // Return the configured state name
+                    }
+                }
+            }
+        }
+
+        // Step 3: No match found, return original name
+        // This allows the system to still process states that aren't configured
+        console.log(`State matching: "${stateName}" → No match found, using original name`);
+        return normalizedInput;
+    },
+
+    /**
+     * Extract base words from a state name for keyword matching
+     * Removes special characters, numbers, and extracts meaningful words
+     * @private
+     * @param {string} stateName - State name (e.g., "Break", "Meeting", "Time Off")
+     * @returns {Array<string>} Array of base words
+     */
+    _extractBaseWords(stateName) {
+        if (!stateName) return [];
+        
+        const words = [];
+        
+        // First, extract individual words (split by spaces, dashes, slashes, colons)
+        const parts = stateName
+            .split(/[\s\/\-:]+/)
+            .map(part => part.trim())
+            .filter(part => part.length > 0);
+        
+        // Extract meaningful words from each part
+        for (const part of parts) {
+            // Remove numbers and special characters, keep only letters
+            const cleaned = part.replace(/[^a-zA-Z]/g, '');
+            
+            if (cleaned.length >= 3) {
+                // Add lowercase version for matching
+                words.push(cleaned.toLowerCase());
+            }
+        }
+        
+        // Also check if the full state name (without numbers/special chars) is a good keyword
+        const fullCleaned = stateName
+            .replace(/[0-9]/g, '')
+            .replace(/[\/\-:]/g, ' ')
+            .replace(/[^\w\s]/g, '')
+            .trim()
+            .replace(/\s+/g, ''); // Remove spaces to get single word
+        
+        if (fullCleaned.length >= 3) {
+            words.push(fullCleaned.toLowerCase());
+        }
+        
+        // Remove duplicates and return
+        return [...new Set(words)];
+    },
+
+    /**
      * Add a new state
      * @param {Object} stateData - State data {name, category, group, isPaid, isDefault}
      * @returns {string} ID of created state

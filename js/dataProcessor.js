@@ -43,7 +43,8 @@ const DataProcessor = {
         let processedCount = 0;
         let skippedCount = 0;
         scheduleData.forEach((entry, index) => {
-            const stateName = entry.scheduleState;
+            // Find matching state name (handles variations like "break- 10 minutes" → "Break")
+            const stateName = StateConfig.findMatchingState(entry.scheduleState);
             let startMinutes = DateUtils.parseTimeToMinutes(entry.startTime);
             let endMinutes = DateUtils.parseTimeToMinutes(entry.endTime);
             
