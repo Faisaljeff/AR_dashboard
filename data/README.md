@@ -28,6 +28,23 @@ Place your schedule CSV files in this folder with the following naming pattern:
    - Check localStorage for previously loaded data
    - Allow manual file upload as a fallback
 
+## CSV File Structure
+
+Your CSV files should have the following columns (in order):
+
+1. **Site** - Site name where agents are based
+2. **Time zone** - Timezone (e.g., "Asia/Kolkata", "America/New_York")
+3. **Team** - Team name (format: "TeamName - LeaderName", system extracts team name before "-")
+4. **Agent** - Agent/employee name
+5. **Date** - Date in MM/DD/YYYY format
+6. **Schedule State** - State name (e.g., "Break", "Meeting", "Work")
+7. **Start Time** - Start time in format "12:30:00 AM" or "4:00 PM"
+8. **End Time** - End time in format "12:30:00 AM" or "4:00 PM"
+9. **Duration** - Duration in format "12:30:00 AM"
+10. **Paid Hours** - Paid duration in format "12:30:00 AM"
+
+**Note:** The Employee ID column has been removed. All columns after Team have shifted left by one position.
+
 ## Example Files
 
 - `Schedule_11172025.csv` - Previous schedule for November 17, 2025

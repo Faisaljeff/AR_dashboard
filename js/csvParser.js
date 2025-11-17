@@ -91,21 +91,31 @@ const CSVParser = {
         for (let i = 0; i < dataRows.length; i++) {
             const row = dataRows[i];
             
-            if (!Array.isArray(row) || row.length < 10) {
+            if (!Array.isArray(row) || row.length < 9) {
                 continue;
             }
 
-            // Extract columns according to specification
+            // Extract columns according to specification (Employee ID column removed)
+            // Column A: Site (index 0)
+            // Column B: Time zone (index 1)
+            // Column C: Team (index 2)
+            // Column D: Agent (index 3)
+            // Column E: Date (index 4)
+            // Column F: Schedule State (index 5)
+            // Column G: Start Time (index 6)
+            // Column H: End Time (index 7)
+            // Column I: Duration (index 8)
+            // Column J: Paid Hours (index 9)
             const site = this._cleanCell(row[0]);
             const timezone = this._cleanCell(row[1]);
             const teamRaw = this._cleanCell(row[2]);
-            const agent = this._cleanCell(row[4]); // Column E (index 4)
-            const date = this._cleanCell(row[5]); // Column F (index 5)
-            const scheduleState = this._cleanCell(row[6]); // Column G (index 6)
-            const startTime = this._cleanCell(row[7]); // Column H (index 7)
-            const endTime = this._cleanCell(row[8]); // Column I (index 8)
-            const duration = this._cleanCell(row[9]); // Column J (index 9)
-            const paidHours = this._cleanCell(row[10]); // Column K (index 10)
+            const agent = this._cleanCell(row[3]); // Column D (index 3)
+            const date = this._cleanCell(row[4]); // Column E (index 4)
+            const scheduleState = this._cleanCell(row[5]); // Column F (index 5)
+            const startTime = this._cleanCell(row[6]); // Column G (index 6)
+            const endTime = this._cleanCell(row[7]); // Column H (index 7)
+            const duration = this._cleanCell(row[8]); // Column I (index 8)
+            const paidHours = this._cleanCell(row[9]); // Column J (index 9)
 
             // Skip rows with blank Schedule State (Rule 1)
             if (!scheduleState || scheduleState.trim() === '') {
