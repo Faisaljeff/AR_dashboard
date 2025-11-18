@@ -51,6 +51,20 @@ const StateConfig = {
     },
 
     /**
+     * Exceptions for state matching - patterns that should NOT match to certain states
+     * Format: { stateName: [array of exception patterns] }
+     * If input contains any exception pattern, it will NOT match to that state
+     * @private
+     */
+    _MATCHING_EXCEPTIONS: {
+        'Break': [
+            'healthy living',  // "Break - Healthy Living" should not match "Break"
+            'medical',         // Any medical-related break should not match regular "Break"
+            'logout'           // Medical logout should not match regular "Break"
+        ]
+    },
+
+    /**
      * Initialize with default states if none exist
      */
     init() {
@@ -139,6 +153,24 @@ const StateConfig = {
         const sortedStates = [...allStates].sort((a, b) => b.name.length - a.name.length);
         
         for (const state of sortedStates) {
+            // Check if this state has matching exceptions
+            // If input contains any exception pattern, skip this state from keyword matching
+            const exceptions = this._MATCHING_EXCEPTIONS[state.name];
+            if (exceptions && Array.isArray(exceptions)) {
+                let hasException = false;
+                for (const exceptionPattern of exceptions) {
+                    if (normalizedInputLower.includes(exceptionPattern.toLowerCase())) {
+                        // Input contains an exception pattern - skip this state
+                        console.log(`State matching: "${stateName}" → Skipping "${state.name}" (contains exception pattern: "${exceptionPattern}")`);
+                        hasException = true;
+                        break;
+                    }
+                }
+                if (hasException) {
+                    continue; // Skip to next state
+                }
+            }
+            
             // Extract base words from state name (remove special chars, numbers, etc.)
             // For "Break", extract ["break"]
             // For "Break Time", extract ["break", "time", "breaktime"]
