@@ -45,8 +45,12 @@ const DataProcessor = {
         scheduleData.forEach((entry, index) => {
             // Find matching state name (handles variations like "break- 10 minutes" → "Break")
             const stateName = StateConfig.findMatchingState(entry.scheduleState);
-            let startMinutes = DateUtils.parseTimeToMinutes(entry.startTime);
-            let endMinutes = DateUtils.parseTimeToMinutes(entry.endTime);
+            const startParsed = DateUtils.parseTimeWithDayOffset(entry.startTime);
+            const endParsed = DateUtils.parseTimeWithDayOffset(entry.endTime);
+            let startMinutes = startParsed.minutes;
+            let endMinutes = endParsed.minutes;
+            const startDayOffset = startParsed.dayOffset || 0;
+            const endDayOffset = endParsed.dayOffset || 0;
             
             // Handle "Full Day" entries - they span the entire day (00:00 to 23:59)
             if (entry.startTime && entry.startTime.trim().toUpperCase() === 'FULL DAY' ||
@@ -70,6 +74,11 @@ const DataProcessor = {
             // AND returns the date in EST/EDT after conversion
             const sourceTimezone = entry.timezone || 'UTC';
             const normalizedTz = DateUtils.normalizeTimezone(sourceTimezone);
+            const entryDateBase = DateUtils.parseDate(entry.date) || new Date();
+            const startSourceDate = DateUtils.addDays(entryDateBase, startDayOffset);
+            const endSourceDate = DateUtils.addDays(entryDateBase, endDayOffset);
+            const startDateStr = DateUtils.formatDate(startSourceDate);
+            const endDateStr = DateUtils.formatDate(endSourceDate);
             
             let startDateEST, endDateEST;
             
@@ -77,8 +86,8 @@ const DataProcessor = {
                 if (normalizedTz !== 'America/New_York') {
                     // Convert to EST/EDT (handles DST automatically and returns date)
                     // Use normalized timezone for conversion (handles underscores, aliases, etc.)
-                    const startConversion = DateUtils.convertToESTWithDate(startMinutes, normalizedTz, entry.date);
-                    const endConversion = DateUtils.convertToESTWithDate(endMinutes, normalizedTz, entry.date);
+                    const startConversion = DateUtils.convertToESTWithDate(startMinutes, normalizedTz, startDateStr);
+                    const endConversion = DateUtils.convertToESTWithDate(endMinutes, normalizedTz, endDateStr);
                     
                     // Validate conversion results
                     if (!startConversion || !endConversion || 
@@ -87,9 +96,8 @@ const DataProcessor = {
                         !startConversion.date || !endConversion.date) {
                         console.warn(`Invalid timezone conversion result for entry:`, entry);
                         // Fallback: use original times and dates
-                        const entryDate = DateUtils.parseDate(entry.date) || new Date();
-                        startDateEST = entryDate;
-                        endDateEST = entryDate;
+                        startDateEST = startSourceDate;
+                        endDateEST = endSourceDate;
                     } else {
                         startMinutes = startConversion.minutes;
                         endMinutes = endConversion.minutes;
@@ -97,17 +105,15 @@ const DataProcessor = {
                         endDateEST = endConversion.date;
                     }
                 } else {
-                    // Already in EST/EDT, parse the date
-                    const entryDate = DateUtils.parseDate(entry.date);
-                    startDateEST = entryDate || new Date();
-                    endDateEST = entryDate || new Date();
+                    // Already in EST/EDT, use the adjusted dates
+                    startDateEST = startSourceDate;
+                    endDateEST = endSourceDate;
                 }
             } catch (error) {
                 console.error(`Error converting timezone "${sourceTimezone}" (normalized: "${normalizedTz}") for entry:`, entry, error);
-                // Fallback: use original times and assume date matches entry date
-                const entryDate = DateUtils.parseDate(entry.date) || new Date();
-                startDateEST = entryDate;
-                endDateEST = entryDate;
+                // Fallback: use original times and assume date matches entry date (plus offsets)
+                startDateEST = startSourceDate;
+                endDateEST = endSourceDate;
             }
 
             // Filter by target date if specified

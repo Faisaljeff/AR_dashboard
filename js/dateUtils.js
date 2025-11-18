@@ -63,6 +63,52 @@ const DateUtils = {
     },
 
     /**
+     * Parse time string and detect if it belongs to the next day using "+" notation
+     * Examples:
+     *  - "+02:00 AM"  -> { minutes: 120, dayOffset: 1 }
+     *  - "02:00 AM +" -> { minutes: 120, dayOffset: 1 }
+     *  - "02:00 AM +2" -> { minutes: 120, dayOffset: 2 }
+     *  - "02:00 AM"   -> { minutes: 120, dayOffset: 0 }
+     * @param {string} timeStr
+     * @returns {{minutes: number|null, dayOffset: number}}
+     */
+    parseTimeWithDayOffset(timeStr) {
+        let dayOffset = 0;
+
+        if (!timeStr || typeof timeStr !== 'string') {
+            return { minutes: null, dayOffset };
+        }
+
+        let trimmed = timeStr.trim();
+        if (trimmed === '' || trimmed.toUpperCase() === 'FULL DAY') {
+            return { minutes: null, dayOffset };
+        }
+
+        // Detect "+" prefix (e.g., "+02:00 AM" or "+1 02:00 AM")
+        const prefixMatch = trimmed.match(/^\+\s*(\d+)?\s*/);
+        if (prefixMatch) {
+            const offset = prefixMatch[1] ? parseInt(prefixMatch[1], 10) : 1;
+            if (!isNaN(offset)) {
+                dayOffset = offset;
+            }
+            trimmed = trimmed.slice(prefixMatch[0].length).trim();
+        }
+
+        // Detect "+" suffix (e.g., "02:00 AM +" or "02:00 AM +1")
+        const suffixMatch = trimmed.match(/(\+\s*(\d+)?)$/);
+        if (suffixMatch) {
+            const offset = suffixMatch[2] ? parseInt(suffixMatch[2], 10) : 1;
+            if (dayOffset === 0 && !isNaN(offset)) {
+                dayOffset = offset;
+            }
+            trimmed = trimmed.slice(0, suffixMatch.index).trim();
+        }
+
+        const minutes = this.parseTimeToMinutes(trimmed);
+        return { minutes, dayOffset };
+    },
+
+    /**
      * Convert minutes since midnight to time string
      * @param {number} minutes - Minutes since midnight
      * @returns {string} Time string in "HH:MM AM/PM" format
@@ -191,6 +237,18 @@ const DateUtils = {
         const day = date.getDate().toString().padStart(2, '0');
         const year = date.getFullYear();
         return `${month}/${day}/${year}`;
+    },
+
+    /**
+     * Add days to a date and return a new Date instance
+     * @param {Date} date - Base date
+     * @param {number} days - Number of days to add (can be negative)
+     * @returns {Date} New date instance advanced by the specified days
+     */
+    addDays(date, days = 0) {
+        const baseDate = (date instanceof Date && !isNaN(date)) ? new Date(date.getTime()) : new Date();
+        baseDate.setDate(baseDate.getDate() + (days || 0));
+        return baseDate;
     },
 
     /**
