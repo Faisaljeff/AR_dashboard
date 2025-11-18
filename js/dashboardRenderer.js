@@ -158,7 +158,7 @@ const DashboardRenderer = {
 
         // Timezone indicator
         const timezoneBadge = document.createElement('div');
-        timezoneBadge.style.cssText = 'font-size: 0.875rem; color: var(--text-secondary); padding: 0.5rem 1rem; background-color: var(--background); border-radius: var(--radius-sm); border: 1px solid var(--border-color);';
+        timezoneBadge.style.cssText = 'font-size: 0.75rem; color: var(--text-secondary); padding: 0.375rem 0.75rem; background-color: var(--background); border-radius: var(--radius-sm); border: 1px solid var(--border-color); white-space: nowrap;';
         timezoneBadge.innerHTML = '<strong>Timezone:</strong> EST/EDT (America/New_York)';
         headerRight.appendChild(timezoneBadge);
 
@@ -188,6 +188,7 @@ const DashboardRenderer = {
 
     /**
      * Create a schedule column (Previous or After Arise)
+     * Only includes columns for states that have data in any interval
      * @private
      */
     _createScheduleColumn(title, uniqueId, processedData, stateNames) {
@@ -198,6 +199,30 @@ const DashboardRenderer = {
         columnTitle.className = 'column-title';
         columnTitle.textContent = title;
         column.appendChild(columnTitle);
+
+        // Filter state names to only include those with data
+        const statesWithData = stateNames.filter(stateName => {
+            // Check if state has data in any interval or in state totals
+            const hasIntervalData = processedData.intervals.some(intervalData => {
+                const stateInfo = intervalData.states[stateName];
+                return stateInfo && (stateInfo.totalDuration > 0 || stateInfo.agentCount > 0);
+            });
+            
+            const stateTotal = processedData.stateTotals[stateName];
+            const hasTotalData = stateTotal && (stateTotal.totalDuration > 0 || stateTotal.totalAgents > 0);
+            
+            return hasIntervalData || hasTotalData;
+        });
+
+        // If no states have data, show empty message
+        if (statesWithData.length === 0) {
+            const emptyMsg = document.createElement('div');
+            emptyMsg.className = 'empty-column-message';
+            emptyMsg.textContent = 'No data available for this schedule';
+            emptyMsg.style.cssText = 'text-align: center; padding: 2rem; color: var(--text-secondary); font-style: italic;';
+            column.appendChild(emptyMsg);
+            return column;
+        }
 
         const tableContainer = document.createElement('div');
         tableContainer.className = 'table-container';
@@ -217,11 +242,12 @@ const DashboardRenderer = {
         timeHeader.textContent = 'Time';
         headerRow.appendChild(timeHeader);
 
-        stateNames.forEach(stateName => {
+        statesWithData.forEach(stateName => {
             const stateHeader = document.createElement('th');
+            stateHeader.className = 'state-header-cell';
             stateHeader.innerHTML = `
-                <div style="font-weight: 600;">${stateName}</div>
-                <div style="font-size: 0.7em; font-weight: normal; opacity: 0.9;">Duration / Count</div>
+                <div class="state-header-name">${stateName}</div>
+                <div class="state-header-subtitle">Duration / Count</div>
             `;
             headerRow.appendChild(stateHeader);
         });
@@ -240,19 +266,20 @@ const DashboardRenderer = {
             timeCell.textContent = intervalData.interval.label;
             row.appendChild(timeCell);
 
-            // State cells
-            stateNames.forEach(stateName => {
+            // State cells - only for states with data
+            statesWithData.forEach(stateName => {
                 const stateCell = document.createElement('td');
                 const stateInfo = intervalData.states[stateName];
                 
-                if (stateInfo) {
+                if (stateInfo && (stateInfo.totalDuration > 0 || stateInfo.agentCount > 0)) {
                     stateCell.className = 'state-cell';
                     stateCell.innerHTML = `
                         <div class="state-duration">${DateUtils.formatDuration(stateInfo.totalDuration)}</div>
                         <div class="state-count">${stateInfo.agentCount} agents</div>
                     `;
                 } else {
-                    stateCell.innerHTML = '<div style="color: var(--text-secondary);">-</div>';
+                    stateCell.className = 'state-cell-empty';
+                    stateCell.innerHTML = '<div class="empty-cell">-</div>';
                 }
                 
                 row.appendChild(stateCell);
@@ -269,6 +296,7 @@ const DashboardRenderer = {
 
     /**
      * Render summary statistics for a group
+     * Only shows cards for states that have data (duration > 0 or agents > 0)
      * @private
      */
     _renderSummaryStats(previousData, ariseData, stateNames) {
@@ -278,6 +306,15 @@ const DashboardRenderer = {
         stateNames.forEach(stateName => {
             const prev = previousData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
             const arise = ariseData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
+            
+            // Only show card if there's data in either prev or arise
+            const hasData = (prev.totalDuration > 0 || prev.totalAgents > 0) || 
+                           (arise.totalDuration > 0 || arise.totalAgents > 0);
+            
+            if (!hasData) {
+                return; // Skip this card
+            }
+            
             const durationDiff = arise.totalDuration - prev.totalDuration;
             const agentsDiff = arise.totalAgents - prev.totalAgents;
 
