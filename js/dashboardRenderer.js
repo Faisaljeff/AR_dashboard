@@ -147,6 +147,63 @@ const DashboardRenderer = {
         title.style.cssText = 'margin: 0; flex: 1;';
         titleContainer.appendChild(title);
         
+        // Toggle switch for show/hide dashboard
+        const toggleContainer = document.createElement('div');
+        toggleContainer.className = 'dashboard-toggle-container';
+        toggleContainer.style.cssText = 'display: flex; align-items: center; gap: 0.5rem;';
+        
+        const toggleSwitch = document.createElement('input');
+        toggleSwitch.type = 'checkbox';
+        toggleSwitch.className = 'dashboard-toggle-switch';
+        toggleSwitch.id = `toggle_${this._sanitizeId(groupName)}`;
+        toggleSwitch.checked = true; // Default to visible
+        toggleSwitch.setAttribute('data-group-name', groupName);
+        toggleSwitch.title = 'Toggle dashboard visibility';
+        
+        const toggleLabel = document.createElement('label');
+        toggleLabel.className = 'dashboard-toggle-label';
+        toggleLabel.setAttribute('for', toggleSwitch.id);
+        toggleLabel.textContent = 'Show';
+        toggleLabel.style.cssText = 'font-size: 0.75rem; color: var(--text-secondary); cursor: pointer; user-select: none;';
+        
+        // Set initial state from settings
+        const visibility = StateConfig.getDashboardVisibility();
+        const isVisible = visibility[groupName] !== false;
+        toggleSwitch.checked = isVisible;
+        toggleLabel.textContent = isVisible ? 'Hide' : 'Show';
+        
+        // Toggle event handler
+        toggleSwitch.addEventListener('change', (e) => {
+            const visible = e.target.checked;
+            StateConfig.setDashboardVisibility(groupName, visible);
+            toggleLabel.textContent = visible ? 'Hide' : 'Show';
+            
+            // Hide/show the dashboard content (keep header visible for toggling)
+            const dashboardContent = section.querySelector('.dashboard-container');
+            if (dashboardContent) {
+                if (visible) {
+                    dashboardContent.style.display = 'grid';
+                    section.classList.remove('dashboard-hidden');
+                } else {
+                    dashboardContent.style.display = 'none';
+                    section.classList.add('dashboard-hidden');
+                }
+            }
+        });
+        
+        // Set initial visibility state
+        if (!isVisible) {
+            const dashboardContent = section.querySelector('.dashboard-container');
+            if (dashboardContent) {
+                dashboardContent.style.display = 'none';
+                section.classList.add('dashboard-hidden');
+            }
+        }
+        
+        toggleContainer.appendChild(toggleLabel);
+        toggleContainer.appendChild(toggleSwitch);
+        titleContainer.appendChild(toggleContainer);
+        
         header.appendChild(titleContainer);
 
         const headerRight = document.createElement('div');

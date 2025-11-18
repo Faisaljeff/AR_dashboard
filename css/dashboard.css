@@ -235,6 +235,79 @@
     font-weight: 600;
 }
 
+/* Dashboard Toggle Switch */
+.dashboard-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: 0.75rem;
+    flex-shrink: 0;
+}
+
+.dashboard-toggle-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.dashboard-toggle-label:hover {
+    color: var(--text-primary);
+}
+
+.dashboard-toggle-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    appearance: none;
+    background-color: var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background-color 0.3s, box-shadow 0.3s;
+    outline: none;
+    flex-shrink: 0;
+}
+
+.dashboard-toggle-switch::before {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: white;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s, box-shadow 0.3s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.dashboard-toggle-switch:checked {
+    background-color: var(--primary-color);
+}
+
+.dashboard-toggle-switch:checked::before {
+    transform: translateX(20px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.dashboard-toggle-switch:hover {
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.dashboard-toggle-switch:checked:hover {
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+}
+
+.dashboard-hidden {
+    opacity: 0.7;
+}
+
+.dashboard-hidden .dashboard-header {
+    border-bottom: 1px dashed var(--border-color);
+}
+
 .summary-stats {
     display: flex;
     gap: 0.75rem;
