@@ -9,6 +9,18 @@ const App = {
     ariseScheduleData: null,
     processedPrevious: null,
     processedArise: null,
+    filters: {
+        teams: new Set(),
+        states: new Set(),
+        categories: new Set(),
+        groups: new Set()
+    },
+    filterOptions: {
+        teams: [],
+        states: [],
+        categories: [],
+        groups: []
+    },
 
     /**
      * Initialize the application
@@ -96,6 +108,9 @@ const App = {
                 document.getElementById('ariseFileName').textContent = file.name;
             }
         });
+
+        // Filters
+        this._setupFilterControls();
     },
 
     /**
@@ -121,6 +136,7 @@ const App = {
             try {
                 this.previousScheduleData = JSON.parse(storedPrevious);
                 this.ariseScheduleData = JSON.parse(storedArise);
+                this._populateFilterOptions();
                 this._updateFileStatus('localStorage', dateKey);
                 this._processAndRender();
             } catch (e) {
@@ -188,6 +204,9 @@ const App = {
                 // Store raw data
                 this.previousScheduleData = scheduleData;
                 this.ariseScheduleData = ariseData;
+
+                // Populate filters
+                this._populateFilterOptions();
 
                 // Store in localStorage for future use
                 const dateKey = this._getDateKey(this.currentDate);
@@ -293,6 +312,7 @@ const App = {
             // Store raw data
             this.previousScheduleData = scheduleData;
             this.ariseScheduleData = ariseData;
+            this._populateFilterOptions();
 
             // Store in localStorage
             const dateKey = this._getDateKey(this.currentDate);
@@ -338,17 +358,33 @@ const App = {
         // Only include entries that, after timezone conversion, fall on this date
         const targetDate = this.currentDate || new Date();
         console.log('App: Target date for filtering:', targetDate);
+        if (this._hasActiveFilters()) {
+            console.log('App: Active filters detected', {
+                teams: Array.from(this.filters.teams),
+                states: Array.from(this.filters.states),
+                categories: Array.from(this.filters.categories),
+                groups: Array.from(this.filters.groups)
+            });
+        }
+
+        const filteredPrevious = this._applyFilters(this.previousScheduleData);
+        const filteredArise = this._applyFilters(this.ariseScheduleData);
+        console.log('App: Filtered previous entries:', filteredPrevious.length);
+        console.log('App: Filtered arise entries:', filteredArise.length);
+        if (filteredPrevious.length === 0 && filteredArise.length === 0 && this._hasActiveFilters()) {
+            DashboardRenderer.showWarning('No records match the selected filters. Please adjust the filters to view data.');
+        }
 
         try {
             // Process both datasets with date filtering
             // This ensures only entries that belong to the selected date (in EST/EDT) are included
             console.log('App: Processing previous schedule data...');
-            this.processedPrevious = DataProcessor.processScheduleData(this.previousScheduleData, targetDate);
+            this.processedPrevious = DataProcessor.processScheduleData(filteredPrevious, targetDate);
             console.log('App: Previous data processed. States found:', Object.keys(this.processedPrevious.stateTotals).length);
             console.log('App: Previous data state totals:', Object.keys(this.processedPrevious.stateTotals));
             
             console.log('App: Processing arise schedule data...');
-            this.processedArise = DataProcessor.processScheduleData(this.ariseScheduleData, targetDate);
+            this.processedArise = DataProcessor.processScheduleData(filteredArise, targetDate);
             console.log('App: Arise data processed. States found:', Object.keys(this.processedArise.stateTotals).length);
             console.log('App: Arise data state totals:', Object.keys(this.processedArise.stateTotals));
 
@@ -363,8 +399,8 @@ const App = {
                 
                 // Try processing without date filter as fallback
                 console.log('App: Attempting to process without date filter...');
-                this.processedPrevious = DataProcessor.processScheduleData(this.previousScheduleData, null);
-                this.processedArise = DataProcessor.processScheduleData(this.ariseScheduleData, null);
+                this.processedPrevious = DataProcessor.processScheduleData(filteredPrevious, null);
+                this.processedArise = DataProcessor.processScheduleData(filteredArise, null);
                 
                 if (Object.keys(this.processedPrevious.stateTotals).length > 0 || 
                     Object.keys(this.processedArise.stateTotals).length > 0) {
@@ -421,6 +457,194 @@ const App = {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}${month}${day}`;
+    },
+
+    /**
+     * Initialize filter controls
+     * @private
+     */
+    _setupFilterControls() {
+        const filterMappings = [
+            { id: 'teamFilter', key: 'teams' },
+            { id: 'stateFilter', key: 'states' },
+            { id: 'categoryFilter', key: 'categories' },
+            { id: 'groupFilter', key: 'groups' }
+        ];
+
+        filterMappings.forEach(({ id, key }) => {
+            const element = document.getElementById(id);
+            if (!element) return;
+            element.addEventListener('change', () => {
+                const selectedValues = Array.from(element.selectedOptions).map(option => option.value);
+                this._updateFilterSelection(key, selectedValues);
+            });
+        });
+
+        const clearBtn = document.getElementById('clearFiltersBtn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this._clearFilters());
+        }
+    },
+
+    /**
+     * Populate filter options using loaded datasets
+     * @private
+     */
+    _populateFilterOptions() {
+        if (!this.previousScheduleData || !this.ariseScheduleData) return;
+
+        const combined = [...this.previousScheduleData, ...this.ariseScheduleData];
+        const teamSet = new Set();
+        const stateSet = new Set();
+
+        combined.forEach(entry => {
+            if (entry.team) {
+                teamSet.add(entry.team);
+            }
+            const normalizedState = StateConfig.findMatchingState(entry.scheduleState);
+            if (normalizedState) {
+                stateSet.add(normalizedState);
+            }
+        });
+
+        const categories = StateConfig.getAllCategories() || [];
+        const groups = StateConfig.getAllGroups() || [];
+
+        this.filterOptions = {
+            teams: Array.from(teamSet).sort((a, b) => a.localeCompare(b)),
+            states: Array.from(stateSet).sort((a, b) => a.localeCompare(b)),
+            categories: [...categories].sort((a, b) => a.localeCompare(b)),
+            groups: [...groups].sort((a, b) => a.localeCompare(b))
+        };
+
+        const syncSelection = (key) => {
+            const available = new Set(this.filterOptions[key]);
+            this.filters[key] = new Set(Array.from(this.filters[key]).filter(value => available.has(value)));
+        };
+        syncSelection('teams');
+        syncSelection('states');
+        syncSelection('categories');
+        syncSelection('groups');
+
+        this._renderFilterOptions();
+    },
+
+    /**
+     * Render filter options in UI
+     * @private
+     */
+    _renderFilterOptions() {
+        const filtersSection = document.getElementById('filtersSection');
+        const hasOptions = this.filterOptions.teams.length > 0 ||
+                           this.filterOptions.states.length > 0 ||
+                           this.filterOptions.categories.length > 0 ||
+                           this.filterOptions.groups.length > 0;
+        if (filtersSection) {
+            filtersSection.style.display = hasOptions ? 'block' : 'none';
+        }
+
+        this._renderSelectOptions('teamFilter', this.filterOptions.teams, this.filters.teams);
+        this._renderSelectOptions('stateFilter', this.filterOptions.states, this.filters.states);
+        this._renderSelectOptions('categoryFilter', this.filterOptions.categories, this.filters.categories);
+        this._renderSelectOptions('groupFilter', this.filterOptions.groups, this.filters.groups);
+    },
+
+    /**
+     * Helper to populate a select element with options
+     * @private
+     */
+    _renderSelectOptions(elementId, values, selectedSet) {
+        const selectEl = document.getElementById(elementId);
+        if (!selectEl) return;
+        selectEl.innerHTML = '';
+        values.forEach(value => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            if (selectedSet.has(value)) {
+                option.selected = true;
+            }
+            selectEl.appendChild(option);
+        });
+    },
+
+    /**
+     * Update selection for specific filter key
+     * @private
+     */
+    _updateFilterSelection(filterKey, values) {
+        this.filters[filterKey] = new Set(values);
+        this._processAndRender();
+    },
+
+    /**
+     * Clear all filters
+     * @private
+     */
+    _clearFilters() {
+        Object.keys(this.filters).forEach(key => {
+            this.filters[key] = new Set();
+        });
+
+        ['teamFilter', 'stateFilter', 'categoryFilter', 'groupFilter'].forEach(id => {
+            const selectEl = document.getElementById(id);
+            if (selectEl) {
+                Array.from(selectEl.options).forEach(option => option.selected = false);
+            }
+        });
+
+        this._processAndRender();
+    },
+
+    /**
+     * Check if any filters are active
+     * @private
+     */
+    _hasActiveFilters() {
+        return Object.values(this.filters).some(set => set.size > 0);
+    },
+
+    /**
+     * Apply filters to dataset
+     * @private
+     */
+    _applyFilters(dataset) {
+        if (!dataset || dataset.length === 0) {
+            return [];
+        }
+
+        if (!this._hasActiveFilters()) {
+            return dataset;
+        }
+
+        return dataset.filter(entry => {
+            const normalizedState = StateConfig.findMatchingState(entry.scheduleState);
+            const stateConfig = StateConfig.getStateByName(normalizedState);
+            const category = stateConfig?.category || null;
+            const group = stateConfig?.group || null;
+
+            if (this.filters.teams.size && (!entry.team || !this.filters.teams.has(entry.team))) {
+                return false;
+            }
+
+            if (this.filters.states.size && (!normalizedState || !this.filters.states.has(normalizedState))) {
+                return false;
+            }
+
+            if (this.filters.categories.size) {
+                if (!category || !this.filters.categories.has(category)) {
+                    return false;
+                }
+            }
+
+            if (this.filters.groups.size) {
+                if (!group || !this.filters.groups.has(group)) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
     }
 };
 

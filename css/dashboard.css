@@ -88,6 +88,60 @@
     font-family: 'Courier New', monospace;
 }
 
+.filters-section {
+    margin-top: 2rem;
+    background-color: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.filters-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.filters-header h3 {
+    margin-bottom: 0.25rem;
+}
+
+.filters-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.filter-group select {
+    width: 100%;
+    min-height: 150px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+    background-color: var(--background);
+}
+
+.filters-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.filter-hint {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
 .state-filter-container {
     display: flex;
     flex-direction: column;

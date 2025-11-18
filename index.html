@@ -52,6 +52,40 @@
 
         </section>
 
+        <!-- Filters Section -->
+        <section class="filters-section" id="filtersSection" style="display: none;">
+            <div class="filters-header">
+                <div>
+                    <h3>Dashboard Filters</h3>
+                    <p>Select one or more filters to refine the dashboards. Hold Ctrl (Cmd on Mac) to choose multiple values.</p>
+                </div>
+                <div class="filters-actions">
+                    <button class="btn btn-secondary" id="clearFiltersBtn" type="button">Clear Filters</button>
+                </div>
+            </div>
+
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label for="teamFilter">Teams</label>
+                    <select id="teamFilter" multiple size="6"></select>
+                </div>
+                <div class="filter-group">
+                    <label for="stateFilter">Schedule States</label>
+                    <select id="stateFilter" multiple size="6"></select>
+                </div>
+                <div class="filter-group">
+                    <label for="categoryFilter">Schedule State Type (Category)</label>
+                    <select id="categoryFilter" multiple size="6"></select>
+                </div>
+                <div class="filter-group">
+                    <label for="groupFilter">Schedule State Group</label>
+                    <select id="groupFilter" multiple size="6"></select>
+                </div>
+            </div>
+
+            <small class="filter-hint">Filters apply immediately when you change a selection.</small>
+        </section>
+
         <section class="loading-section" id="loadingSection" style="display: none;">
             <div class="loading-spinner"></div>
             <p>Processing schedule data...</p>
