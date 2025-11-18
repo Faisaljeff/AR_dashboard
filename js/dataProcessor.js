@@ -45,8 +45,11 @@ const DataProcessor = {
         scheduleData.forEach((entry, index) => {
             // Find matching state name (handles variations like "break- 10 minutes" → "Break")
             const stateName = StateConfig.findMatchingState(entry.scheduleState);
-            let startMinutes = DateUtils.parseTimeToMinutes(entry.startTime);
-            let endMinutes = DateUtils.parseTimeToMinutes(entry.endTime);
+
+            const startTimeInfo = DateUtils.parseTimeWithNextDayIndicator(entry.startTime);
+            const endTimeInfo = DateUtils.parseTimeWithNextDayIndicator(entry.endTime);
+            let startMinutes = startTimeInfo.minutes;
+            let endMinutes = endTimeInfo.minutes;
             
             // Handle "Full Day" entries - they span the entire day (00:00 to 23:59)
             if (entry.startTime && entry.startTime.trim().toUpperCase() === 'FULL DAY' ||
@@ -72,13 +75,18 @@ const DataProcessor = {
             const normalizedTz = DateUtils.normalizeTimezone(sourceTimezone);
             
             let startDateEST, endDateEST;
+            const baseEntryDate = DateUtils.parseDate(entry.date) || new Date();
+            const startDateForConversion = DateUtils.addDays(baseEntryDate, startTimeInfo.dayOffset) || baseEntryDate;
+            const endDateForConversion = DateUtils.addDays(baseEntryDate, endTimeInfo.dayOffset) || baseEntryDate;
+            const startDateStr = DateUtils.formatDate(startDateForConversion);
+            const endDateStr = DateUtils.formatDate(endDateForConversion);
             
             try {
                 if (normalizedTz !== 'America/New_York') {
                     // Convert to EST/EDT (handles DST automatically and returns date)
                     // Use normalized timezone for conversion (handles underscores, aliases, etc.)
-                    const startConversion = DateUtils.convertToESTWithDate(startMinutes, normalizedTz, entry.date);
-                    const endConversion = DateUtils.convertToESTWithDate(endMinutes, normalizedTz, entry.date);
+                    const startConversion = DateUtils.convertToESTWithDate(startMinutes, normalizedTz, startDateStr);
+                    const endConversion = DateUtils.convertToESTWithDate(endMinutes, normalizedTz, endDateStr);
                     
                     // Validate conversion results
                     if (!startConversion || !endConversion || 

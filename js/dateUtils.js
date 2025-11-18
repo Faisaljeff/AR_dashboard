@@ -63,6 +63,46 @@ const DateUtils = {
     },
 
     /**
+     * Parse time string and detect indicators (like "+" for next-day)
+     * @param {string} timeStr - Raw time string that may include indicators
+     * @returns {{ minutes: number|null, isNextDay: boolean, dayOffset: number }}
+     */
+    parseTimeWithNextDayIndicator(timeStr) {
+        if (!timeStr || typeof timeStr !== 'string') {
+            return {
+                minutes: null,
+                isNextDay: false,
+                dayOffset: 0
+            };
+        }
+
+        let normalized = timeStr.trim();
+        let isNextDay = false;
+
+        // Detect leading "+" (e.g., "+ 02:00 AM" or "+02:00 AM")
+        if (normalized.startsWith('+')) {
+            isNextDay = true;
+            normalized = normalized.replace(/^\+\s*/, '');
+        }
+
+        // Detect trailing "+" (e.g., "02:00 AM +" or "02:00 AM+")
+        if (normalized.endsWith('+')) {
+            isNextDay = true;
+            normalized = normalized.replace(/\s*\+$/, '');
+        }
+
+        // Clean up any remaining lone "+" characters around the time
+        normalized = normalized.replace(/^\+\s*/, '').replace(/\s*\+$/, '').trim();
+
+        const minutes = this.parseTimeToMinutes(normalized);
+        return {
+            minutes,
+            isNextDay,
+            dayOffset: isNextDay ? 1 : 0
+        };
+    },
+
+    /**
      * Convert minutes since midnight to time string
      * @param {number} minutes - Minutes since midnight
      * @returns {string} Time string in "HH:MM AM/PM" format
@@ -178,6 +218,21 @@ const DateUtils = {
         }
         
         return new Date(year, month, day);
+    },
+
+    /**
+     * Add days to a date (returns a new Date)
+     * @param {Date} date - Base date
+     * @param {number} days - Number of days to add (can be negative)
+     * @returns {Date|null} New date or null if base date invalid
+     */
+    addDays(date, days = 0) {
+        if (!(date instanceof Date) || isNaN(date.getTime())) {
+            return null;
+        }
+        const result = new Date(date);
+        result.setDate(result.getDate() + (Number.isFinite(days) ? days : 0));
+        return result;
     },
 
     /**
