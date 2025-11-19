@@ -21,6 +21,12 @@ const App = {
         categories: [],
         groups: []
     },
+    filterContainerIds: {
+        teams: 'teamFilterOptions',
+        states: 'stateFilterOptions',
+        categories: 'categoryFilterOptions',
+        groups: 'groupFilterOptions'
+    },
 
     /**
      * Initialize the application
@@ -111,6 +117,9 @@ const App = {
 
         // Filters
         this._setupFilterControls();
+
+        // Dashboard visibility controls
+        this._setupDashboardToggleControls();
     },
 
     /**
@@ -464,25 +473,61 @@ const App = {
      * @private
      */
     _setupFilterControls() {
-        const filterMappings = [
-            { id: 'teamFilter', key: 'teams' },
-            { id: 'stateFilter', key: 'states' },
-            { id: 'categoryFilter', key: 'categories' },
-            { id: 'groupFilter', key: 'groups' }
-        ];
-
-        filterMappings.forEach(({ id, key }) => {
-            const element = document.getElementById(id);
-            if (!element) return;
-            element.addEventListener('change', () => {
-                const selectedValues = Array.from(element.selectedOptions).map(option => option.value);
-                this._updateFilterSelection(key, selectedValues);
+        const filtersSection = document.getElementById('filtersSection');
+        if (filtersSection) {
+            filtersSection.addEventListener('change', (event) => {
+                const target = event.target;
+                if (target && target.classList.contains('filter-checkbox')) {
+                    this._handleFilterCheckboxChange(target);
+                }
             });
-        });
+
+            filtersSection.addEventListener('click', (event) => {
+                const target = event.target;
+                if (!target) return;
+
+                if (target.classList.contains('filter-select-all')) {
+                    event.preventDefault();
+                    const filterKey = target.dataset.filterKey;
+                    this._selectAllFilter(filterKey);
+                } else if (target.classList.contains('filter-clear')) {
+                    event.preventDefault();
+                    const filterKey = target.dataset.filterKey;
+                    this._clearFilter(filterKey);
+                }
+            });
+        }
 
         const clearBtn = document.getElementById('clearFiltersBtn');
         if (clearBtn) {
             clearBtn.addEventListener('click', () => this._clearFilters());
+        }
+    },
+
+    /**
+     * Set up dashboard visibility toggle controls
+     * @private
+     */
+    _setupDashboardToggleControls() {
+        const pillsContainer = document.getElementById('dashboardTogglePills');
+        if (pillsContainer) {
+            pillsContainer.addEventListener('click', (event) => {
+                const target = event.target;
+                if (target && target.classList.contains('dashboard-pill')) {
+                    const groupName = target.dataset.groupName;
+                    this._toggleDashboardVisibility(groupName);
+                }
+            });
+        }
+
+        const showBtn = document.getElementById('showAllDashboardsBtn');
+        if (showBtn) {
+            showBtn.addEventListener('click', () => this._setAllDashboardsVisibility(true));
+        }
+
+        const hideBtn = document.getElementById('hideAllDashboardsBtn');
+        if (hideBtn) {
+            hideBtn.addEventListener('click', () => this._setAllDashboardsVisibility(false));
         }
     },
 
@@ -543,38 +588,134 @@ const App = {
             filtersSection.style.display = hasOptions ? 'block' : 'none';
         }
 
-        this._renderSelectOptions('teamFilter', this.filterOptions.teams, this.filters.teams);
-        this._renderSelectOptions('stateFilter', this.filterOptions.states, this.filters.states);
-        this._renderSelectOptions('categoryFilter', this.filterOptions.categories, this.filters.categories);
-        this._renderSelectOptions('groupFilter', this.filterOptions.groups, this.filters.groups);
+        this._renderCheckboxOptions('teams');
+        this._renderCheckboxOptions('states');
+        this._renderCheckboxOptions('categories');
+        this._renderCheckboxOptions('groups');
+
+        this._renderDashboardToggleBar();
     },
 
     /**
-     * Helper to populate a select element with options
+     * Render checkbox options for a filter key
      * @private
      */
-    _renderSelectOptions(elementId, values, selectedSet) {
-        const selectEl = document.getElementById(elementId);
-        if (!selectEl) return;
-        selectEl.innerHTML = '';
+    _renderCheckboxOptions(filterKey) {
+        const containerId = this.filterContainerIds[filterKey];
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const values = this.filterOptions[filterKey] || [];
+        container.innerHTML = '';
+
+        if (values.length === 0) {
+            const emptyMsg = document.createElement('p');
+            emptyMsg.className = 'filter-hint';
+            emptyMsg.textContent = 'No options available for this filter.';
+            container.appendChild(emptyMsg);
+            return;
+        }
+
         values.forEach(value => {
-            const option = document.createElement('option');
-            option.value = value;
-            option.textContent = value;
-            if (selectedSet.has(value)) {
-                option.selected = true;
-            }
-            selectEl.appendChild(option);
+            const optionLabel = document.createElement('label');
+            optionLabel.className = 'filter-option';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'filter-checkbox';
+            checkbox.dataset.filterKey = filterKey;
+            checkbox.value = value;
+            checkbox.checked = this.filters[filterKey].has(value);
+
+            const text = document.createElement('span');
+            text.textContent = value;
+
+            optionLabel.appendChild(checkbox);
+            optionLabel.appendChild(text);
+            container.appendChild(optionLabel);
         });
     },
 
     /**
-     * Update selection for specific filter key
+     * Handle checkbox change events for filters
      * @private
      */
-    _updateFilterSelection(filterKey, values) {
-        this.filters[filterKey] = new Set(values);
+    _handleFilterCheckboxChange(checkboxEl) {
+        const filterKey = checkboxEl.dataset.filterKey;
+        if (!filterKey || !this.filters[filterKey]) {
+            return;
+        }
+
+        const value = checkboxEl.value;
+        if (checkboxEl.checked) {
+            this.filters[filterKey].add(value);
+        } else {
+            this.filters[filterKey].delete(value);
+        }
+
         this._processAndRender();
+    },
+
+    /**
+     * Render dashboard visibility pills
+     * @private
+     */
+    _renderDashboardToggleBar() {
+        const bar = document.getElementById('dashboardToggleBar');
+        const pillsContainer = document.getElementById('dashboardTogglePills');
+        if (!bar || !pillsContainer) return;
+
+        const groups = StateConfig.getAllGroups() || [];
+        if (groups.length === 0) {
+            bar.style.display = 'none';
+            return;
+        }
+
+        const visibility = StateConfig.getDashboardVisibility();
+        pillsContainer.innerHTML = '';
+
+        groups.forEach(group => {
+            const pill = document.createElement('button');
+            pill.type = 'button';
+            pill.className = `dashboard-pill ${visibility[group] !== false ? 'active' : ''}`;
+            pill.dataset.groupName = group;
+            pill.textContent = group;
+            pillsContainer.appendChild(pill);
+        });
+
+        bar.style.display = 'block';
+    },
+
+    /**
+     * Toggle a specific dashboard visibility
+     * @private
+     */
+    _toggleDashboardVisibility(groupName) {
+        if (!groupName) return;
+        const visibility = StateConfig.getDashboardVisibility();
+        const currentlyVisible = visibility[groupName] !== false;
+        StateConfig.setDashboardVisibility(groupName, !currentlyVisible);
+        this._renderDashboardToggleBar();
+
+        if (this.processedPrevious && this.processedArise) {
+            DashboardRenderer.render(this.processedPrevious, this.processedArise);
+        } else {
+            this._processAndRender();
+        }
+    },
+
+    /**
+     * Set all dashboard visibility at once
+     * @private
+     */
+    _setAllDashboardsVisibility(visible) {
+        StateConfig.setAllDashboardVisibility(visible);
+        this._renderDashboardToggleBar();
+        if (this.processedPrevious && this.processedArise) {
+            DashboardRenderer.render(this.processedPrevious, this.processedArise);
+        } else {
+            this._processAndRender();
+        }
     },
 
     /**
@@ -584,15 +725,31 @@ const App = {
     _clearFilters() {
         Object.keys(this.filters).forEach(key => {
             this.filters[key] = new Set();
+            this._renderCheckboxOptions(key);
         });
 
-        ['teamFilter', 'stateFilter', 'categoryFilter', 'groupFilter'].forEach(id => {
-            const selectEl = document.getElementById(id);
-            if (selectEl) {
-                Array.from(selectEl.options).forEach(option => option.selected = false);
-            }
-        });
+        this._processAndRender();
+    },
 
+    /**
+     * Select all values for a filter
+     * @private
+     */
+    _selectAllFilter(filterKey) {
+        if (!filterKey || !this.filterOptions[filterKey]) return;
+        this.filters[filterKey] = new Set(this.filterOptions[filterKey]);
+        this._renderCheckboxOptions(filterKey);
+        this._processAndRender();
+    },
+
+    /**
+     * Clear a specific filter
+     * @private
+     */
+    _clearFilter(filterKey) {
+        if (!filterKey || !this.filters[filterKey]) return;
+        this.filters[filterKey] = new Set();
+        this._renderCheckboxOptions(filterKey);
         this._processAndRender();
     },
 

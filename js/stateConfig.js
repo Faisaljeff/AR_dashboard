@@ -567,6 +567,19 @@ const StateConfig = {
     },
 
     /**
+     * Set visibility for all dashboards at once
+     * @param {boolean} visible - Desired visibility state for all groups
+     */
+    setAllDashboardVisibility(visible) {
+        const visibility = this.getDashboardVisibility();
+        const allGroups = this.getAllGroups();
+        allGroups.forEach(group => {
+            visibility[group] = visible;
+        });
+        this._saveDashboardVisibility(visibility);
+    },
+
+    /**
      * Get all visible dashboard groups
      * @returns {Array} Array of group names that should be visible
      */

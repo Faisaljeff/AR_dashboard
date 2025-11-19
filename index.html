@@ -57,7 +57,7 @@
             <div class="filters-header">
                 <div>
                     <h3>Dashboard Filters</h3>
-                    <p>Select one or more filters to refine the dashboards. Hold Ctrl (Cmd on Mac) to choose multiple values.</p>
+                    <p>Select one or more filters using the checkboxes below. Use “Select All” or “Clear” for quick changes.</p>
                 </div>
                 <div class="filters-actions">
                     <button class="btn btn-secondary" id="clearFiltersBtn" type="button">Clear Filters</button>
@@ -65,25 +65,81 @@
             </div>
 
             <div class="filters-grid">
-                <div class="filter-group">
-                    <label for="teamFilter">Teams</label>
-                    <select id="teamFilter" multiple size="6"></select>
+                <div class="filter-card" data-filter="teams">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Teams</label>
+                            <small>Choose one or more teams</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link filter-select-all" data-filter-key="teams">Select All</button>
+                            <button type="button" class="btn btn-link filter-clear" data-filter-key="teams">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="teamFilterOptions"></div>
                 </div>
-                <div class="filter-group">
-                    <label for="stateFilter">Schedule States</label>
-                    <select id="stateFilter" multiple size="6"></select>
+
+                <div class="filter-card" data-filter="states">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Schedule States</label>
+                            <small>Filter by specific schedule states</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link filter-select-all" data-filter-key="states">Select All</button>
+                            <button type="button" class="btn btn-link filter-clear" data-filter-key="states">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="stateFilterOptions"></div>
                 </div>
-                <div class="filter-group">
-                    <label for="categoryFilter">Schedule State Type (Category)</label>
-                    <select id="categoryFilter" multiple size="6"></select>
+
+                <div class="filter-card" data-filter="categories">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Schedule State Type (Category)</label>
+                            <small>Breaks, meetings, training, etc.</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link filter-select-all" data-filter-key="categories">Select All</button>
+                            <button type="button" class="btn btn-link filter-clear" data-filter-key="categories">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="categoryFilterOptions"></div>
                 </div>
-                <div class="filter-group">
-                    <label for="groupFilter">Schedule State Group</label>
-                    <select id="groupFilter" multiple size="6"></select>
+
+                <div class="filter-card" data-filter="groups">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Schedule State Group</label>
+                            <small>Focus on specific dashboard groups</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link filter-select-all" data-filter-key="groups">Select All</button>
+                            <button type="button" class="btn btn-link filter-clear" data-filter-key="groups">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="groupFilterOptions"></div>
                 </div>
             </div>
 
             <small class="filter-hint">Filters apply immediately when you change a selection.</small>
+        </section>
+
+        <!-- Dashboard Toggle Bar -->
+        <section class="dashboard-toggle-bar" id="dashboardToggleBar" style="display: none;">
+            <div class="toggle-bar-header">
+                <div>
+                    <h3>Dashboard Visibility</h3>
+                    <p>Quickly show or hide entire dashboard groups.</p>
+                </div>
+                <div class="toggle-bar-actions">
+                    <button type="button" class="btn btn-secondary" id="showAllDashboardsBtn">Show All</button>
+                    <button type="button" class="btn btn-secondary" id="hideAllDashboardsBtn">Hide All</button>
+                </div>
+            </div>
+            <div class="dashboard-toggle-pills" id="dashboardTogglePills">
+                <!-- Pills injected dynamically -->
+            </div>
         </section>
 
         <section class="loading-section" id="loadingSection" style="display: none;">
