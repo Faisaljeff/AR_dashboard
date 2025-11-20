@@ -20,6 +20,7 @@ const DataProcessor = {
 
         const intervals = DateUtils.generateIntervals();
         const stateMap = new Map(); // Map to track state totals
+        const processedEntries = []; // Array to store processed entry metadata for audit
         const intervalData = intervals.map(interval => {
             const stateData = new Map();
             return {
@@ -237,6 +238,67 @@ const DataProcessor = {
 
             // Update state totals (using clamped times for accurate duration on target date)
             const duration = actualEndMinutes - clampedStartMinutes;
+            
+            // Parse source duration from CSV
+            const durationSourceMinutes = entry.duration ? DateUtils.parseTimeToMinutes(entry.duration) : null;
+            // If parseTimeToMinutes returns null or doesn't work for duration format, try alternative
+            let sourceDuration = durationSourceMinutes;
+            if (sourceDuration === null && entry.duration) {
+                // Try parsing as duration format (e.g., "1:30:00" or "90:00")
+                const durationStr = entry.duration.trim();
+                const durationMatch = durationStr.match(/(\d+):(\d+)(?::(\d+))?/);
+                if (durationMatch) {
+                    const hours = parseInt(durationMatch[1], 10) || 0;
+                    const mins = parseInt(durationMatch[2], 10) || 0;
+                    const secs = parseInt(durationMatch[3], 10) || 0;
+                    sourceDuration = hours * 60 + mins + Math.round(secs / 60);
+                }
+            }
+            
+            // Create entry metadata for audit page
+            const entryMetadata = {
+                // Original CSV data
+                site: entry.site || '',
+                team: entry.team || '',
+                agent: entry.agent || '',
+                date: entry.date || '',
+                scheduleState: entry.scheduleState || '',
+                normalizedState: stateName,
+                startTime: entry.startTime || '',
+                endTime: entry.endTime || '',
+                duration: entry.duration || '', // Original CSV duration string
+                paidHours: entry.paidHours || '',
+                timezone: entry.timezone || '',
+                normalizedTimezone: normalizedTz,
+                
+                // Source duration (from CSV)
+                durationSourceMinutes: sourceDuration,
+                
+                // EST/EDT converted values
+                startESTMinutes: clampedStartMinutes,
+                endESTMinutes: clampedEndMinutes,
+                startESTDate: DateUtils.formatDate(startDateEST),
+                startESTTime: DateUtils.minutesToTimeString(clampedStartMinutes),
+                endESTDate: DateUtils.formatDate(endDateEST),
+                endESTTime: DateUtils.minutesToTimeString(clampedEndMinutes),
+                
+                // Calculated EST duration
+                durationESTMinutes: duration,
+                
+                // Comparison
+                durationDifference: sourceDuration !== null ? (duration - sourceDuration) : null,
+                
+                // Processing flags
+                wasClamped: clampedStartMinutes !== startMinutes || clampedEndMinutes !== endMinutes,
+                wasTimezoneConverted: normalizedTz !== 'America/New_York',
+                dayOffsetApplied: startDayOffset !== 0 || endDayOffset !== 0,
+                originalStartMinutes: startMinutes,
+                originalEndMinutes: endMinutes
+            };
+            
+            // Add to processed entries array
+            processedEntries.push(entryMetadata);
+            
             if (!stateMap.has(stateName)) {
                 stateMap.set(stateName, {
                     totalDuration: 0,
@@ -313,8 +375,11 @@ const DataProcessor = {
         return {
             intervals: processedIntervals,
             stateTotals: stateTotals,
+            processedEntries: processedEntries, // Metadata for audit page
             metadata: {
                 totalEntries: scheduleData.length,
+                processedEntries: processedCount,
+                skippedEntries: skippedCount,
                 uniqueAgents: new Set(scheduleData.map(e => e.agent)).size,
                 uniqueStates: Array.from(stateMap.keys()),
                 dateRange: this._getDateRange(scheduleData)

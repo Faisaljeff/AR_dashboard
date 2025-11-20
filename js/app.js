@@ -425,9 +425,41 @@ const App = {
             console.log('App: Rendering dashboards...');
             DashboardRenderer.render(this.processedPrevious, this.processedArise);
             console.log('App: Dashboard rendering complete');
+            
+            // Store audit data for audit page
+            this._storeAuditData();
         } catch (error) {
             console.error('App: Error processing data:', error);
             DashboardRenderer.showError(`Error processing data: ${error.message}`);
+        }
+    },
+    
+    /**
+     * Store processed data for audit page
+     * @private
+     */
+    _storeAuditData() {
+        if (!this.processedPrevious || !this.processedArise) return;
+        
+        const dateKey = this._getDateKey(this.currentDate);
+        
+        try {
+            // Store audit data with processed entries
+            localStorage.setItem(`auditData_previous_${dateKey}`, JSON.stringify({
+                processedEntries: this.processedPrevious.processedEntries || [],
+                metadata: this.processedPrevious.metadata || {},
+                timestamp: new Date().toISOString()
+            }));
+            
+            localStorage.setItem(`auditData_arise_${dateKey}`, JSON.stringify({
+                processedEntries: this.processedArise.processedEntries || [],
+                metadata: this.processedArise.metadata || {},
+                timestamp: new Date().toISOString()
+            }));
+            
+            console.log('App: Audit data stored for date:', dateKey);
+        } catch (e) {
+            console.error('App: Error storing audit data:', e);
         }
     },
 

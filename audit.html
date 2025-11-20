@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Audit - Workforce Schedule Dashboard</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>Workforce Schedule Dashboard</h1>
+            <nav>
+                <a href="index.html" class="nav-link">Dashboard</a>
+                <a href="audit.html" class="nav-link active">Data Audit</a>
+                <a href="settings.html" class="nav-link">Settings</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Filters Section -->
+        <section class="filters-section" id="filtersSection" style="display: none;">
+            <div class="filters-header">
+                <div>
+                    <h3>Audit Filters</h3>
+                    <p>Filter the audit data to view specific records. Changes apply in real-time.</p>
+                </div>
+                <div class="filters-actions">
+                    <button class="btn btn-secondary" id="clearFiltersBtn" type="button">Clear Filters</button>
+                </div>
+            </div>
+
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label for="auditTeamFilter">Teams</label>
+                    <div class="filter-checkbox-container" id="auditTeamFilter"></div>
+                </div>
+                <div class="filter-group">
+                    <label for="auditStateFilter">Schedule States</label>
+                    <div class="filter-checkbox-container" id="auditStateFilter"></div>
+                </div>
+                <div class="filter-group">
+                    <label for="auditCategoryFilter">Schedule State Type (Category)</label>
+                    <div class="filter-checkbox-container" id="auditCategoryFilter"></div>
+                </div>
+                <div class="filter-group">
+                    <label for="auditGroupFilter">Schedule State Group</label>
+                    <div class="filter-checkbox-container" id="auditGroupFilter"></div>
+                </div>
+                <div class="filter-group">
+                    <label for="auditTimezoneFilter">Timezone</label>
+                    <div class="filter-checkbox-container" id="auditTimezoneFilter"></div>
+                </div>
+                <div class="filter-group">
+                    <label for="auditDateRangeStart">Date Range Start</label>
+                    <input type="date" id="auditDateRangeStart" class="date-input">
+                </div>
+                <div class="filter-group">
+                    <label for="auditDateRangeEnd">Date Range End</label>
+                    <input type="date" id="auditDateRangeEnd" class="date-input">
+                </div>
+            </div>
+
+            <small class="filter-hint">Filters apply immediately when you change a selection.</small>
+        </section>
+
+        <!-- Tabs for Previous/After Arise -->
+        <section class="audit-tabs-section" id="auditTabsSection" style="display: none;">
+            <div class="audit-tabs">
+                <button class="audit-tab active" data-tab="previous" id="tabPrevious">Previous Schedule</button>
+                <button class="audit-tab" data-tab="arise" id="tabArise">After Arise Schedule</button>
+            </div>
+        </section>
+
+        <!-- Audit Table Container -->
+        <section class="audit-table-section" id="auditTableSection" style="display: none;">
+            <div class="audit-table-header">
+                <div class="audit-stats">
+                    <span class="audit-stat-item" id="totalRowsCount">0 rows</span>
+                    <span class="audit-stat-item" id="totalDurationSource">Source: 0:00</span>
+                    <span class="audit-stat-item" id="totalDurationEST">EST: 0:00</span>
+                    <span class="audit-stat-item" id="totalDifference">Diff: 0:00</span>
+                </div>
+                <button class="btn btn-primary" id="exportCsvBtn">Export to CSV</button>
+            </div>
+            <div class="audit-table-container">
+                <table class="audit-table" id="auditTable">
+                    <thead id="auditTableHead"></thead>
+                    <tbody id="auditTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- No Data Message -->
+        <section class="no-data-section" id="noDataSection">
+            <div class="no-data-message">
+                <h2>No Data Available</h2>
+                <p>Please load schedule data from the <a href="index.html">Dashboard</a> page first.</p>
+                <p class="no-data-hint">The audit page requires processed schedule data to display entries and calculations.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2025 Workforce Management Dashboard</p>
+        </div>
+    </footer>
+
+    <script src="js/dateUtils.js"></script>
+    <script src="js/stateConfig.js"></script>
+    <script src="js/auditRenderer.js"></script>
+    <script src="js/auditApp.js"></script>
+</body>
+</html>
+
