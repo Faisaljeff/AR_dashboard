@@ -40,12 +40,88 @@ const DataProcessor = {
             targetDateEST = { year, month, day };
         }
 
+        // First pass: Identify agents who have "Day Off" with "Full Day" for the target date
+        // These agents should be excluded from all other schedule states
+        const agentsWithDayOff = new Set();
+        const dayOffStates = new Set(['Day Off', 'Time Off', 'DayOff', 'TimeOff']); // Common variations
+        
+        scheduleData.forEach((entry) => {
+            const stateName = StateConfig.findMatchingState(entry.scheduleState);
+            const isFullDay = (entry.startTime && entry.startTime.trim().toUpperCase() === 'FULL DAY') ||
+                             (entry.endTime && entry.endTime.trim().toUpperCase() === 'FULL DAY');
+            
+            // Check if this is a day off state
+            const isDayOffState = dayOffStates.has(stateName) || 
+                                 stateName.toLowerCase().includes('day off') ||
+                                 stateName.toLowerCase().includes('time off');
+            
+            if (isDayOffState && isFullDay) {
+                // Check if this entry falls on the target date
+                // For day off entries, we need to check if they fall on the target date
+                // after timezone conversion (if applicable)
+                const entryDate = DateUtils.parseDate(entry.date);
+                let shouldInclude = true;
+                
+                if (targetDateEST && entryDate) {
+                    // For "Full Day" entries, we need to check if the date (after timezone conversion)
+                    // matches the target date. Since it's a full day, we'll check the entry date
+                    // and also consider timezone conversion if needed
+                    const sourceTimezone = entry.timezone || 'UTC';
+                    const normalizedTz = DateUtils.normalizeTimezone(sourceTimezone);
+                    
+                    // If not in EST/EDT, we need to check what date this full day becomes in EST/EDT
+                    if (normalizedTz !== 'America/New_York') {
+                        // For a full day entry, check what date it becomes in EST/EDT
+                        // We'll use the start of the day (00:00) to check
+                        const startConversion = DateUtils.convertToESTWithDate(0, normalizedTz, DateUtils.formatDate(entryDate));
+                        if (startConversion && startConversion.date) {
+                            const estDate = startConversion.date;
+                            shouldInclude = estDate.getFullYear() === targetDateEST.year &&
+                                           estDate.getMonth() === targetDateEST.month &&
+                                           estDate.getDate() === targetDateEST.day;
+                        }
+                    } else {
+                        // Already in EST/EDT, just check the entry date
+                        shouldInclude = entryDate.getFullYear() === targetDateEST.year &&
+                                       entryDate.getMonth() === targetDateEST.month &&
+                                       entryDate.getDate() === targetDateEST.day;
+                    }
+                } else if (!targetDateEST) {
+                    // No target date filter, include all day off entries
+                    shouldInclude = true;
+                }
+                
+                if (shouldInclude) {
+                    agentsWithDayOff.add(entry.agent);
+                }
+            }
+        });
+        
+        if (agentsWithDayOff.size > 0) {
+            console.log(`DataProcessor: Found ${agentsWithDayOff.size} agents with Day Off (Full Day):`, Array.from(agentsWithDayOff));
+        }
+
         // Process each schedule entry
         let processedCount = 0;
         let skippedCount = 0;
         scheduleData.forEach((entry, index) => {
             // Find matching state name (handles variations like "break- 10 minutes" → "Break")
             const stateName = StateConfig.findMatchingState(entry.scheduleState);
+            
+            // Check if this agent has a Day Off (Full Day) - if so, exclude from all other states
+            const isDayOffState = dayOffStates.has(stateName) || 
+                                 stateName.toLowerCase().includes('day off') ||
+                                 stateName.toLowerCase().includes('time off');
+            
+            // If agent has day off and this is NOT a day off state, skip this entry
+            if (agentsWithDayOff.has(entry.agent) && !isDayOffState) {
+                skippedCount++;
+                if (index < 5) {
+                    console.log(`DataProcessor: Skipping entry ${index} - agent ${entry.agent} has Day Off (Full Day):`, entry);
+                }
+                return; // Skip this entry
+            }
+            
             const startParsed = DateUtils.parseTimeWithDayOffset(entry.startTime);
             const endParsed = DateUtils.parseTimeWithDayOffset(entry.endTime);
             let startMinutes = startParsed.minutes;
@@ -475,19 +551,19 @@ const DataProcessor = {
     /**
      * Compare two processed schedule datasets
      * @param {Object} previousData - Previous schedule data
-     * @param {Object} ariseData - After Arise schedule data
+     * @param {Object} updatedData - Updated schedule data
      * @returns {Object} Comparison results
      */
-    compareSchedules(previousData, ariseData) {
+    compareSchedules(previousData, updatedData) {
         const comparison = {
             intervals: [],
             stateComparisons: {},
             summary: {
                 totalStatesPrevious: Object.keys(previousData.stateTotals).length,
-                totalStatesArise: Object.keys(ariseData.stateTotals).length,
+                totalStatesUpdated: Object.keys(updatedData.stateTotals).length,
                 commonStates: [],
                 uniqueToPrevious: [],
-                uniqueToArise: []
+                uniqueToUpdated: []
             }
         };
 
@@ -495,24 +571,24 @@ const DataProcessor = {
         const intervals = DateUtils.generateIntervals();
         comparison.intervals = intervals.map((interval, index) => {
             const prevInterval = previousData.intervals[index];
-            const ariseInterval = ariseData.intervals[index];
+            const updatedInterval = updatedData.intervals[index];
 
             const states = {};
             const allStateNames = new Set([
                 ...Object.keys(prevInterval.states),
-                ...Object.keys(ariseInterval.states)
+                ...Object.keys(updatedInterval.states)
             ]);
 
             allStateNames.forEach(stateName => {
                 const prev = prevInterval.states[stateName] || { totalDuration: 0, agentCount: 0 };
-                const arise = ariseInterval.states[stateName] || { totalDuration: 0, agentCount: 0 };
+                const updated = updatedInterval.states[stateName] || { totalDuration: 0, agentCount: 0 };
 
                 states[stateName] = {
                     previous: prev,
-                    arise: arise,
+                    updated: updated,
                     difference: {
-                        duration: arise.totalDuration - prev.totalDuration,
-                        agentCount: arise.agentCount - prev.agentCount
+                        duration: updated.totalDuration - prev.totalDuration,
+                        agentCount: updated.agentCount - prev.agentCount
                     }
                 };
             });
@@ -526,28 +602,28 @@ const DataProcessor = {
         // Compare state totals
         const allStates = new Set([
             ...Object.keys(previousData.stateTotals),
-            ...Object.keys(ariseData.stateTotals)
+            ...Object.keys(updatedData.stateTotals)
         ]);
 
         allStates.forEach(stateName => {
             const prev = previousData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
-            const arise = ariseData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
+            const updated = updatedData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
 
             comparison.stateComparisons[stateName] = {
                 previous: prev,
-                arise: arise,
+                updated: updated,
                 difference: {
-                    duration: arise.totalDuration - prev.totalDuration,
-                    agents: arise.totalAgents - prev.totalAgents
+                    duration: updated.totalDuration - prev.totalDuration,
+                    agents: updated.totalAgents - prev.totalAgents
                 }
             };
 
-            if (prev.totalDuration > 0 && arise.totalDuration > 0) {
+            if (prev.totalDuration > 0 && updated.totalDuration > 0) {
                 comparison.summary.commonStates.push(stateName);
             } else if (prev.totalDuration > 0) {
                 comparison.summary.uniqueToPrevious.push(stateName);
-            } else if (arise.totalDuration > 0) {
-                comparison.summary.uniqueToArise.push(stateName);
+            } else if (updated.totalDuration > 0) {
+                comparison.summary.uniqueToUpdated.push(stateName);
             }
         });
 

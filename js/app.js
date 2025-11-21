@@ -6,9 +6,9 @@
 const App = {
     currentDate: null,
     previousScheduleData: null,
-    ariseScheduleData: null,
+    updatedScheduleData: null,
     processedPrevious: null,
-    processedArise: null,
+    processedUpdated: null,
     filters: {
         teams: new Set(),
         states: new Set(),
@@ -108,10 +108,10 @@ const App = {
             }
         });
 
-        document.getElementById('ariseFile').addEventListener('change', (e) => {
+        document.getElementById('updatedFile').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
-                document.getElementById('ariseFileName').textContent = file.name;
+                document.getElementById('updatedFileName').textContent = file.name;
             }
         });
 
@@ -139,12 +139,12 @@ const App = {
         // If files not found, try localStorage
         const dateKey = this._getDateKey(this.currentDate);
         const storedPrevious = localStorage.getItem(`scheduleData_previous_${dateKey}`);
-        const storedArise = localStorage.getItem(`scheduleData_arise_${dateKey}`);
+        const storedUpdated = localStorage.getItem(`scheduleData_updated_${dateKey}`);
 
-        if (storedPrevious && storedArise) {
+        if (storedPrevious && storedUpdated) {
             try {
                 this.previousScheduleData = JSON.parse(storedPrevious);
-                this.ariseScheduleData = JSON.parse(storedArise);
+                this.updatedScheduleData = JSON.parse(storedUpdated);
                 this._populateFilterOptions();
                 this._updateFileStatus('localStorage', dateKey);
                 this._processAndRender();
@@ -159,6 +159,7 @@ const App = {
 
     /**
      * Load data from CSV files in data folder
+     * Forces a fresh reload by clearing cache and adding cache-busting
      * @private
      * @returns {Promise<boolean>} True if files were loaded successfully
      */
@@ -166,45 +167,70 @@ const App = {
         if (!this.currentDate) return false;
 
         const dateStr = DateUtils.formatDateForFilename(this.currentDate);
-        const scheduleFileName = `data/Schedule_${dateStr}.csv`;
-        const ariseFileName = `data/Arise_Schedule_${dateStr}.csv`;
+        const dateKey = this._getDateKey(this.currentDate);
+        
+        // Clear cached data from localStorage to force fresh load
+        localStorage.removeItem(`scheduleData_previous_${dateKey}`);
+        localStorage.removeItem(`scheduleData_updated_${dateKey}`);
+        localStorage.removeItem(`auditData_previous_${dateKey}`);
+        localStorage.removeItem(`auditData_updated_${dateKey}`);
+        
+        // Clear in-memory data
+        this.previousScheduleData = null;
+        this.updatedScheduleData = null;
+        this.processedPrevious = null;
+        this.processedUpdated = null;
+
+        // Add cache-busting query parameter to force fresh fetch
+        const cacheBuster = `?t=${Date.now()}`;
+        const scheduleFileName = `data/Schedule_${dateStr}.csv${cacheBuster}`;
+        const updatedFileName = `data/Updated_Schedule_${dateStr}.csv${cacheBuster}`;
 
         DashboardRenderer.showLoading();
         DashboardRenderer.hideError();
 
         try {
-            // Try to fetch both files
-            const [scheduleResponse, ariseResponse] = await Promise.allSettled([
-                fetch(scheduleFileName),
-                fetch(ariseFileName)
+            // Try to fetch both files with cache-busting and no-cache headers
+            const fetchOptions = {
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
+            };
+            
+            const [scheduleResponse, updatedResponse] = await Promise.allSettled([
+                fetch(scheduleFileName, fetchOptions),
+                fetch(updatedFileName, fetchOptions)
             ]);
 
             // Check if both files exist and loaded successfully
             const scheduleOk = scheduleResponse.status === 'fulfilled' && scheduleResponse.value.ok;
-            const ariseOk = ariseResponse.status === 'fulfilled' && ariseResponse.value.ok;
+            const updatedOk = updatedResponse.status === 'fulfilled' && updatedResponse.value.ok;
 
-            if (scheduleOk && ariseOk) {
+            if (scheduleOk && updatedOk) {
                 // Both files found - read their content
                 const scheduleResponseObj = scheduleResponse.value;
-                const ariseResponseObj = ariseResponse.value;
+                const updatedResponseObj = updatedResponse.value;
                 
-                const [scheduleText, ariseText] = await Promise.all([
+                const [scheduleText, updatedText] = await Promise.all([
                     scheduleResponseObj.text(),
-                    ariseResponseObj.text()
+                    updatedResponseObj.text()
                 ]);
 
                 // Parse both files
-                const [scheduleData, ariseData] = await Promise.all([
+                const [scheduleData, updatedData] = await Promise.all([
                     CSVParser.parseFile(scheduleText),
-                    CSVParser.parseFile(ariseText)
+                    CSVParser.parseFile(updatedText)
                 ]);
 
                 // Validate data
                 const scheduleValidation = CSVParser.validateData(scheduleData);
-                const ariseValidation = CSVParser.validateData(ariseData);
+                const updatedValidation = CSVParser.validateData(updatedData);
 
-                if (!scheduleValidation.valid || !ariseValidation.valid) {
-                    const errors = [...scheduleValidation.errors, ...ariseValidation.errors].join('\n');
+                if (!scheduleValidation.valid || !updatedValidation.valid) {
+                    const errors = [...scheduleValidation.errors, ...updatedValidation.errors].join('\n');
                     DashboardRenderer.showError(`Data validation failed:\n${errors}`);
                     DashboardRenderer.hideLoading();
                     return false;
@@ -212,7 +238,7 @@ const App = {
 
                 // Store raw data
                 this.previousScheduleData = scheduleData;
-                this.ariseScheduleData = ariseData;
+                this.updatedScheduleData = updatedData;
 
                 // Populate filters
                 this._populateFilterOptions();
@@ -220,7 +246,7 @@ const App = {
                 // Store in localStorage for future use
                 const dateKey = this._getDateKey(this.currentDate);
                 localStorage.setItem(`scheduleData_previous_${dateKey}`, JSON.stringify(scheduleData));
-                localStorage.setItem(`scheduleData_arise_${dateKey}`, JSON.stringify(ariseData));
+                localStorage.setItem(`scheduleData_updated_${dateKey}`, JSON.stringify(updatedData));
 
                 // Update UI
                 this._updateFileStatus('dataFolder', dateStr);
@@ -238,8 +264,8 @@ const App = {
                     DashboardRenderer.showError(`Previous schedule file not found: ${scheduleFileName}`);
                     DashboardRenderer.hideLoading();
                     return false;
-                } else if (!ariseOk) {
-                    DashboardRenderer.showError(`After Arise schedule file not found: ${ariseFileName}`);
+                } else if (!updatedOk) {
+                    DashboardRenderer.showError(`Updated schedule file not found: ${updatedFileName}`);
                     DashboardRenderer.hideLoading();
                     return false;
                 }
@@ -260,28 +286,28 @@ const App = {
      */
     _updateFileStatus(source, dateInfo) {
         const scheduleFileNameEl = document.getElementById('scheduleFileName');
-        const ariseFileNameEl = document.getElementById('ariseFileName');
+        const updatedFileNameEl = document.getElementById('updatedFileName');
 
         if (source === 'dataFolder') {
             scheduleFileNameEl.textContent = `Schedule_${dateInfo}.csv (loaded from data folder)`;
             scheduleFileNameEl.style.color = 'var(--success-color)';
-            ariseFileNameEl.textContent = `Arise_Schedule_${dateInfo}.csv (loaded from data folder)`;
-            ariseFileNameEl.style.color = 'var(--success-color)';
+            updatedFileNameEl.textContent = `Updated_Schedule_${dateInfo}.csv (loaded from data folder)`;
+            updatedFileNameEl.style.color = 'var(--success-color)';
         } else if (source === 'localStorage') {
             scheduleFileNameEl.textContent = `Schedule data (loaded from cache for ${dateInfo})`;
             scheduleFileNameEl.style.color = 'var(--text-secondary)';
-            ariseFileNameEl.textContent = `Arise Schedule data (loaded from cache for ${dateInfo})`;
-            ariseFileNameEl.style.color = 'var(--text-secondary)';
+            updatedFileNameEl.textContent = `Updated Schedule data (loaded from cache for ${dateInfo})`;
+            updatedFileNameEl.style.color = 'var(--text-secondary)';
         } else if (source === 'uploaded') {
             scheduleFileNameEl.textContent = `Schedule_${dateInfo}.csv (uploaded)`;
             scheduleFileNameEl.style.color = 'var(--success-color)';
-            ariseFileNameEl.textContent = `Arise_Schedule_${dateInfo}.csv (uploaded)`;
-            ariseFileNameEl.style.color = 'var(--success-color)';
+            updatedFileNameEl.textContent = `Updated_Schedule_${dateInfo}.csv (uploaded)`;
+            updatedFileNameEl.style.color = 'var(--success-color)';
         } else if (source === 'notFound') {
             scheduleFileNameEl.textContent = 'No file found - please upload files';
             scheduleFileNameEl.style.color = 'var(--text-secondary)';
-            ariseFileNameEl.textContent = 'No file found - please upload files';
-            ariseFileNameEl.style.color = 'var(--text-secondary)';
+            updatedFileNameEl.textContent = 'No file found - please upload files';
+            updatedFileNameEl.style.color = 'var(--text-secondary)';
         }
     },
 
@@ -291,9 +317,9 @@ const App = {
      */
     async _loadDataFromFiles() {
         const scheduleFile = document.getElementById('scheduleFile').files[0];
-        const ariseFile = document.getElementById('ariseFile').files[0];
+        const updatedFile = document.getElementById('updatedFile').files[0];
 
-        if (!scheduleFile || !ariseFile) {
+        if (!scheduleFile || !updatedFile) {
             DashboardRenderer.showError('Please upload both schedule files.');
             return;
         }
@@ -303,30 +329,30 @@ const App = {
 
         try {
             // Parse both files
-            const [scheduleData, ariseData] = await Promise.all([
+            const [scheduleData, updatedData] = await Promise.all([
                 CSVParser.parseFile(scheduleFile),
-                CSVParser.parseFile(ariseFile)
+                CSVParser.parseFile(updatedFile)
             ]);
 
             // Validate data
             const scheduleValidation = CSVParser.validateData(scheduleData);
-            const ariseValidation = CSVParser.validateData(ariseData);
+            const updatedValidation = CSVParser.validateData(updatedData);
 
-            if (!scheduleValidation.valid || !ariseValidation.valid) {
-                const errors = [...scheduleValidation.errors, ...ariseValidation.errors].join('\n');
+            if (!scheduleValidation.valid || !updatedValidation.valid) {
+                const errors = [...scheduleValidation.errors, ...updatedValidation.errors].join('\n');
                 DashboardRenderer.showError(`Data validation failed:\n${errors}`);
                 return;
             }
 
             // Store raw data
             this.previousScheduleData = scheduleData;
-            this.ariseScheduleData = ariseData;
+            this.updatedScheduleData = updatedData;
             this._populateFilterOptions();
 
             // Store in localStorage
             const dateKey = this._getDateKey(this.currentDate);
             localStorage.setItem(`scheduleData_previous_${dateKey}`, JSON.stringify(scheduleData));
-            localStorage.setItem(`scheduleData_arise_${dateKey}`, JSON.stringify(ariseData));
+            localStorage.setItem(`scheduleData_updated_${dateKey}`, JSON.stringify(updatedData));
 
             // Update file status
             this._updateFileStatus('uploaded', dateKey);
@@ -349,15 +375,15 @@ const App = {
     _processAndRender() {
         console.log('App: _processAndRender called');
         console.log('App: previousScheduleData:', this.previousScheduleData?.length || 0, 'entries');
-        console.log('App: ariseScheduleData:', this.ariseScheduleData?.length || 0, 'entries');
+        console.log('App: updatedScheduleData:', this.updatedScheduleData?.length || 0, 'entries');
         
-        if (!this.previousScheduleData || !this.ariseScheduleData) {
+        if (!this.previousScheduleData || !this.updatedScheduleData) {
             console.warn('App: Missing schedule data, cannot render');
             DashboardRenderer.showError('Please load schedule data files first.');
             return;
         }
 
-        if (this.previousScheduleData.length === 0 || this.ariseScheduleData.length === 0) {
+        if (this.previousScheduleData.length === 0 || this.updatedScheduleData.length === 0) {
             console.warn('App: Empty schedule data');
             DashboardRenderer.showError('Schedule data files are empty. Please check your CSV files.');
             return;
@@ -377,10 +403,10 @@ const App = {
         }
 
         const filteredPrevious = this._applyFilters(this.previousScheduleData);
-        const filteredArise = this._applyFilters(this.ariseScheduleData);
+        const filteredUpdated = this._applyFilters(this.updatedScheduleData);
         console.log('App: Filtered previous entries:', filteredPrevious.length);
-        console.log('App: Filtered arise entries:', filteredArise.length);
-        if (filteredPrevious.length === 0 && filteredArise.length === 0 && this._hasActiveFilters()) {
+        console.log('App: Filtered updated entries:', filteredUpdated.length);
+        if (filteredPrevious.length === 0 && filteredUpdated.length === 0 && this._hasActiveFilters()) {
             DashboardRenderer.showWarning('No records match the selected filters. Please adjust the filters to view data.');
         }
 
@@ -392,27 +418,27 @@ const App = {
             console.log('App: Previous data processed. States found:', Object.keys(this.processedPrevious.stateTotals).length);
             console.log('App: Previous data state totals:', Object.keys(this.processedPrevious.stateTotals));
             
-            console.log('App: Processing arise schedule data...');
-            this.processedArise = DataProcessor.processScheduleData(filteredArise, targetDate);
-            console.log('App: Arise data processed. States found:', Object.keys(this.processedArise.stateTotals).length);
-            console.log('App: Arise data state totals:', Object.keys(this.processedArise.stateTotals));
+            console.log('App: Processing updated schedule data...');
+            this.processedUpdated = DataProcessor.processScheduleData(filteredUpdated, targetDate);
+            console.log('App: Updated data processed. States found:', Object.keys(this.processedUpdated.stateTotals).length);
+            console.log('App: Updated data state totals:', Object.keys(this.processedUpdated.stateTotals));
 
             // Check if we have any data after processing
             const hasPreviousData = Object.keys(this.processedPrevious.stateTotals).length > 0;
-            const hasAriseData = Object.keys(this.processedArise.stateTotals).length > 0;
+            const hasUpdatedData = Object.keys(this.processedUpdated.stateTotals).length > 0;
             
-            if (!hasPreviousData && !hasAriseData) {
+            if (!hasPreviousData && !hasUpdatedData) {
                 console.warn('App: No data found after processing. This might be due to strict date filtering.');
                 console.log('App: Previous entries processed:', this.processedPrevious.metadata?.totalEntries || 0);
-                console.log('App: Arise entries processed:', this.processedArise.metadata?.totalEntries || 0);
+                console.log('App: Updated entries processed:', this.processedUpdated.metadata?.totalEntries || 0);
                 
                 // Try processing without date filter as fallback
                 console.log('App: Attempting to process without date filter...');
                 this.processedPrevious = DataProcessor.processScheduleData(filteredPrevious, null);
-                this.processedArise = DataProcessor.processScheduleData(filteredArise, null);
+                this.processedUpdated = DataProcessor.processScheduleData(filteredUpdated, null);
                 
                 if (Object.keys(this.processedPrevious.stateTotals).length > 0 || 
-                    Object.keys(this.processedArise.stateTotals).length > 0) {
+                    Object.keys(this.processedUpdated.stateTotals).length > 0) {
                     console.warn('App: Data found without date filter. Date filtering may be too strict.');
                     DashboardRenderer.showWarning('Data found but may not match selected date. Showing all available data.');
                 } else {
@@ -423,7 +449,7 @@ const App = {
 
             // Render multiple dashboards (one per visible group)
             console.log('App: Rendering dashboards...');
-            DashboardRenderer.render(this.processedPrevious, this.processedArise);
+            DashboardRenderer.render(this.processedPrevious, this.processedUpdated);
             console.log('App: Dashboard rendering complete');
             
             // Store audit data for audit page
@@ -439,7 +465,7 @@ const App = {
      * @private
      */
     _storeAuditData() {
-        if (!this.processedPrevious || !this.processedArise) return;
+        if (!this.processedPrevious || !this.processedUpdated) return;
         
         const dateKey = this._getDateKey(this.currentDate);
         
@@ -451,9 +477,9 @@ const App = {
                 timestamp: new Date().toISOString()
             }));
             
-            localStorage.setItem(`auditData_arise_${dateKey}`, JSON.stringify({
-                processedEntries: this.processedArise.processedEntries || [],
-                metadata: this.processedArise.metadata || {},
+            localStorage.setItem(`auditData_updated_${dateKey}`, JSON.stringify({
+                processedEntries: this.processedUpdated.processedEntries || [],
+                metadata: this.processedUpdated.metadata || {},
                 timestamp: new Date().toISOString()
             }));
             
@@ -568,9 +594,9 @@ const App = {
      * @private
      */
     _populateFilterOptions() {
-        if (!this.previousScheduleData || !this.ariseScheduleData) return;
+        if (!this.previousScheduleData || !this.updatedScheduleData) return;
 
-        const combined = [...this.previousScheduleData, ...this.ariseScheduleData];
+        const combined = [...this.previousScheduleData, ...this.updatedScheduleData];
         const teamSet = new Set();
         const stateSet = new Set();
 
@@ -729,8 +755,8 @@ const App = {
         StateConfig.setDashboardVisibility(groupName, !currentlyVisible);
         this._renderDashboardToggleBar();
 
-        if (this.processedPrevious && this.processedArise) {
-            DashboardRenderer.render(this.processedPrevious, this.processedArise);
+        if (this.processedPrevious && this.processedUpdated) {
+            DashboardRenderer.render(this.processedPrevious, this.processedUpdated);
         } else {
             this._processAndRender();
         }
@@ -743,8 +769,8 @@ const App = {
     _setAllDashboardsVisibility(visible) {
         StateConfig.setAllDashboardVisibility(visible);
         this._renderDashboardToggleBar();
-        if (this.processedPrevious && this.processedArise) {
-            DashboardRenderer.render(this.processedPrevious, this.processedArise);
+        if (this.processedPrevious && this.processedUpdated) {
+            DashboardRenderer.render(this.processedPrevious, this.processedUpdated);
         } else {
             this._processAndRender();
         }

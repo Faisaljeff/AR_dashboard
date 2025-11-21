@@ -27,11 +27,27 @@ const AuditRenderer = {
     },
     
     /**
-     * Apply filters to the data
+     * Apply filters to the data (if no filters provided, show all data)
      * @param {Object} filters - Filter object with teams, states, categories, groups, timezones, dateRange
      */
     applyFilters(filters) {
         if (!this.currentData) return;
+        
+        // If no filters provided or all filters are empty, show all data
+        if (!filters || (
+            (!filters.teams || filters.teams.size === 0) &&
+            (!filters.states || filters.states.size === 0) &&
+            (!filters.categories || filters.categories.size === 0) &&
+            (!filters.groups || filters.groups.size === 0) &&
+            (!filters.timezones || filters.timezones.size === 0) &&
+            !filters.dateRangeStart &&
+            !filters.dateRangeEnd
+        )) {
+            this.filteredData = [...this.currentData];
+            this._renderTable();
+            this._updateTotals();
+            return;
+        }
         
         this.filteredData = this.currentData.filter(entry => {
             // Team filter

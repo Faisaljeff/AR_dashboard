@@ -4,116 +4,487 @@
  */
 
 const AuditApp = {
+    currentDate: null,
     currentTab: 'previous',
+    previousScheduleData: null,
+    updatedScheduleData: null,
     previousData: null,
-    ariseData: null,
-    filters: {
-        teams: new Set(),
-        states: new Set(),
-        categories: new Set(),
-        groups: new Set(),
-        timezones: new Set(),
-        dateRangeStart: null,
-        dateRangeEnd: null
-    },
-    filterOptions: {
-        teams: [],
-        states: [],
-        categories: [],
-        groups: [],
-        timezones: []
-    },
+    updatedData: null,
     
     /**
      * Initialize the audit page
      */
     init() {
-        this._loadData();
+        // Set today's date as default
+        const today = new Date();
+        const dateInput = document.getElementById('auditDatePicker');
+        dateInput.value = this._formatDateForInput(today);
+        this.currentDate = today;
+
+        // Set up event listeners
         this._setupEventListeners();
-        this._populateFilterOptions();
-        this._renderFilters();
+
+        // Try to load data for today
+        this._tryLoadStoredData().catch(err => {
+            console.error('Error loading initial data:', err);
+        });
     },
     
     /**
-     * Load processed data from localStorage
-     * @private
-     */
-    _loadData() {
-        // Try to get current date from URL or use today
-        const urlParams = new URLSearchParams(window.location.search);
-        const dateParam = urlParams.get('date');
-        const targetDate = dateParam ? new Date(dateParam) : new Date();
-        
-        const dateKey = this._getDateKey(targetDate);
-        
-        // Try to load audit data
-        const previousAuditData = localStorage.getItem(`auditData_previous_${dateKey}`);
-        const ariseAuditData = localStorage.getItem(`auditData_arise_${dateKey}`);
-        
-        if (previousAuditData && ariseAuditData) {
-            try {
-                this.previousData = JSON.parse(previousAuditData);
-                this.ariseData = JSON.parse(ariseAuditData);
-                
-                // Show tabs and table
-                document.getElementById('auditTabsSection').style.display = 'block';
-                document.getElementById('auditTableSection').style.display = 'block';
-                document.getElementById('noDataSection').style.display = 'none';
-                
-                // Render initial data
-                this._switchTab('previous');
-                
-                return;
-            } catch (e) {
-                console.error('Error loading audit data:', e);
-            }
-        }
-        
-        // No data found - show message
-        document.getElementById('auditTabsSection').style.display = 'none';
-        document.getElementById('auditTableSection').style.display = 'none';
-        document.getElementById('noDataSection').style.display = 'block';
-        document.getElementById('filtersSection').style.display = 'none';
-    },
-    
-    /**
-     * Set up event listeners
+     * Set up all event listeners
      * @private
      */
     _setupEventListeners() {
+        const datePicker = document.getElementById('auditDatePicker');
+        const prevDayBtn = document.getElementById('auditPrevDayBtn');
+        const nextDayBtn = document.getElementById('auditNextDayBtn');
+        const todayBtn = document.getElementById('auditTodayBtn');
+
+        // Date picker
+        datePicker.addEventListener('change', async (e) => {
+            this.currentDate = new Date(e.target.value);
+            await this._tryLoadStoredData();
+        });
+
+        // Previous day button
+        prevDayBtn.addEventListener('click', async () => {
+            if (!this.currentDate) {
+                this.currentDate = new Date();
+            }
+            this.currentDate.setDate(this.currentDate.getDate() - 1);
+            this._updateDatePicker();
+            await this._tryLoadStoredData();
+        });
+
+        // Next day button
+        nextDayBtn.addEventListener('click', async () => {
+            if (!this.currentDate) {
+                this.currentDate = new Date();
+            }
+            this.currentDate.setDate(this.currentDate.getDate() + 1);
+            this._updateDatePicker();
+            await this._tryLoadStoredData();
+        });
+
+        // Today button
+        todayBtn.addEventListener('click', async () => {
+            this.currentDate = new Date();
+            this._updateDatePicker();
+            await this._tryLoadStoredData();
+        });
+
+        // Refresh data button (reload from data folder)
+        document.getElementById('auditRefreshDataBtn').addEventListener('click', async () => {
+            await this._loadDataFromDataFolder();
+        });
+
+        // Load data button (manual upload)
+        document.getElementById('auditLoadDataBtn').addEventListener('click', () => {
+            this._loadDataFromFiles();
+        });
+
+        // File inputs
+        document.getElementById('auditScheduleFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('auditScheduleFileName').textContent = file.name;
+            }
+        });
+
+        document.getElementById('auditUpdatedFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('auditUpdatedFileName').textContent = file.name;
+            }
+        });
+
         // Tab switching
         document.getElementById('tabPrevious').addEventListener('click', () => {
             this._switchTab('previous');
         });
         
-        document.getElementById('tabArise').addEventListener('click', () => {
-            this._switchTab('arise');
-        });
-        
-        // Clear filters button
-        document.getElementById('clearFiltersBtn').addEventListener('click', () => {
-            this._clearFilters();
+        document.getElementById('tabUpdated').addEventListener('click', () => {
+            this._switchTab('updated');
         });
         
         // Export CSV button
         document.getElementById('exportCsvBtn').addEventListener('click', () => {
             AuditRenderer.exportToCSV();
         });
-        
-        // Date range filters
-        document.getElementById('auditDateRangeStart').addEventListener('change', (e) => {
-            this.filters.dateRangeStart = e.target.value || null;
-            this._applyFilters();
-        });
-        
-        document.getElementById('auditDateRangeEnd').addEventListener('change', (e) => {
-            this.filters.dateRangeEnd = e.target.value || null;
-            this._applyFilters();
-        });
+    },
+
+    /**
+     * Update date picker input
+     * @private
+     */
+    _updateDatePicker() {
+        const dateInput = document.getElementById('auditDatePicker');
+        dateInput.value = this._formatDateForInput(this.currentDate);
+    },
+
+    /**
+     * Format date for input field (YYYY-MM-DD)
+     * @private
+     */
+    _formatDateForInput(date) {
+        if (!date) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
     },
     
     /**
-     * Switch between Previous and After Arise tabs
+     * Try to load stored data for current date
+     * Priority: 1. CSV files from data folder, 2. localStorage (processed), 3. localStorage (raw), 4. Manual upload
+     * @private
+     */
+    async _tryLoadStoredData() {
+        if (!this.currentDate) return;
+
+        // First, try to load from CSV files in data folder
+        const loadedFromFiles = await this._loadDataFromDataFolder();
+        if (loadedFromFiles) {
+            return;
+        }
+
+        // If files not found, try localStorage (check for processed data first)
+        const dateKey = this._getDateKey(this.currentDate);
+        const storedPreviousProcessed = localStorage.getItem(`auditData_previous_${dateKey}`);
+        const storedUpdatedProcessed = localStorage.getItem(`auditData_updated_${dateKey}`);
+
+        if (storedPreviousProcessed && storedUpdatedProcessed) {
+            try {
+                this.previousData = JSON.parse(storedPreviousProcessed);
+                this.updatedData = JSON.parse(storedUpdatedProcessed);
+                
+                // Check if processedEntries exist
+                if (this.previousData && this.previousData.processedEntries && this.previousData.processedEntries.length > 0) {
+                    this._updateFileStatus('localStorage', dateKey);
+                    
+                    // Show tabs and table
+                    document.getElementById('auditTabsSection').style.display = 'block';
+                    document.getElementById('auditTableSection').style.display = 'block';
+                    document.getElementById('noDataSection').style.display = 'none';
+                    
+                    // Render initial data
+                    this._switchTab('previous');
+                    return;
+                }
+            } catch (e) {
+                console.error('Error loading processed data:', e);
+            }
+        }
+
+        // Try loading raw data from localStorage and process it
+        const storedPrevious = localStorage.getItem(`scheduleData_previous_${dateKey}`);
+        const storedUpdated = localStorage.getItem(`scheduleData_updated_${dateKey}`);
+
+        if (storedPrevious && storedUpdated) {
+            try {
+                this.previousScheduleData = JSON.parse(storedPrevious);
+                this.updatedScheduleData = JSON.parse(storedUpdated);
+                this._updateFileStatus('localStorage', dateKey);
+                this._processAndRender();
+            } catch (e) {
+                console.error('Error loading stored data:', e);
+                this._showError('Error loading stored data: ' + e.message);
+            }
+        } else {
+            // No data found - show message
+            this._updateFileStatus('notFound', dateKey);
+            this._showNoData();
+        }
+    },
+
+    /**
+     * Load data from CSV files in data folder
+     * Forces a fresh reload by clearing cache and adding cache-busting
+     * @private
+     * @returns {Promise<boolean>} True if files were loaded successfully
+     */
+    async _loadDataFromDataFolder() {
+        if (!this.currentDate) return false;
+
+        const dateStr = DateUtils.formatDateForFilename(this.currentDate);
+        const dateKey = this._getDateKey(this.currentDate);
+        
+        // Clear cached data from localStorage to force fresh load
+        localStorage.removeItem(`scheduleData_previous_${dateKey}`);
+        localStorage.removeItem(`scheduleData_updated_${dateKey}`);
+        localStorage.removeItem(`auditData_previous_${dateKey}`);
+        localStorage.removeItem(`auditData_updated_${dateKey}`);
+        
+        // Clear in-memory data
+        this.previousScheduleData = null;
+        this.updatedScheduleData = null;
+        this.previousData = null;
+        this.updatedData = null;
+
+        // Add cache-busting query parameter to force fresh fetch
+        const cacheBuster = `?t=${Date.now()}`;
+        const scheduleFileName = `data/Schedule_${dateStr}.csv${cacheBuster}`;
+        const updatedFileName = `data/Updated_Schedule_${dateStr}.csv${cacheBuster}`;
+
+        this._showLoading();
+        this._hideError();
+
+        try {
+            // Try to fetch both files with cache-busting and no-cache headers
+            const fetchOptions = {
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
+            };
+            
+            const [scheduleResponse, updatedResponse] = await Promise.allSettled([
+                fetch(scheduleFileName, fetchOptions),
+                fetch(updatedFileName, fetchOptions)
+            ]);
+
+            // Check if both files exist and loaded successfully
+            const scheduleOk = scheduleResponse.status === 'fulfilled' && scheduleResponse.value.ok;
+            const updatedOk = updatedResponse.status === 'fulfilled' && updatedResponse.value.ok;
+
+            if (scheduleOk && updatedOk) {
+                // Both files found - read their content
+                const scheduleResponseObj = scheduleResponse.value;
+                const updatedResponseObj = updatedResponse.value;
+                
+                const [scheduleText, updatedText] = await Promise.all([
+                    scheduleResponseObj.text(),
+                    updatedResponseObj.text()
+                ]);
+
+                // Parse both files
+                const [scheduleData, updatedData] = await Promise.all([
+                    CSVParser.parseFile(scheduleText),
+                    CSVParser.parseFile(updatedText)
+                ]);
+
+                // Validate data
+                const scheduleValidation = CSVParser.validateData(scheduleData);
+                const updatedValidation = CSVParser.validateData(updatedData);
+
+                if (!scheduleValidation.valid || !updatedValidation.valid) {
+                    const errors = [...scheduleValidation.errors, ...updatedValidation.errors].join('\n');
+                    this._showError(`Data validation failed:\n${errors}`);
+                    this._hideLoading();
+                    return false;
+                }
+
+                // Store raw data
+                this.previousScheduleData = scheduleData;
+                this.updatedScheduleData = updatedData;
+
+                console.log('Loaded from data folder:');
+                console.log('Previous schedule entries:', scheduleData.length);
+                console.log('Updated schedule entries:', updatedData.length);
+                if (scheduleData.length > 0) {
+                    console.log('First previous entry:', scheduleData[0]);
+                }
+                if (updatedData.length > 0) {
+                    console.log('First updated entry:', updatedData[0]);
+                }
+
+                // Store in localStorage for future use
+                const dateKey = this._getDateKey(this.currentDate);
+                localStorage.setItem(`scheduleData_previous_${dateKey}`, JSON.stringify(scheduleData));
+                localStorage.setItem(`scheduleData_updated_${dateKey}`, JSON.stringify(updatedData));
+
+                // Update UI (use dateStr without cache-busting parameter)
+                this._updateFileStatus('dataFolder', dateStr);
+                
+                // Process and render
+                this._processAndRender();
+                this._hideLoading();
+                return true;
+
+            } else {
+                // Files not found in data folder
+                if (!scheduleOk && !ariseOk) {
+                    // Both files missing - this is expected, will fall back to localStorage
+                } else if (!scheduleOk) {
+                    this._showError(`Previous schedule file not found: ${scheduleFileName}`);
+                    this._hideLoading();
+                    return false;
+                } else if (!updatedOk) {
+                    this._showError(`Updated schedule file not found: ${updatedFileName}`);
+                    this._hideLoading();
+                    return false;
+                }
+                this._hideLoading();
+                return false;
+            }
+
+        } catch (error) {
+            console.error('Error loading files from data folder:', error);
+            this._showError('Error loading files: ' + error.message);
+            this._hideLoading();
+            return false;
+        }
+    },
+
+    /**
+     * Load data from uploaded files
+     * @private
+     */
+    async _loadDataFromFiles() {
+        const scheduleFile = document.getElementById('auditScheduleFile').files[0];
+        const updatedFile = document.getElementById('auditUpdatedFile').files[0];
+
+        if (!scheduleFile || !updatedFile) {
+            this._showError('Please upload both schedule files.');
+            return;
+        }
+
+        this._showLoading();
+        this._hideError();
+
+        try {
+            // Parse both files
+            const [scheduleData, updatedData] = await Promise.all([
+                CSVParser.parseFile(scheduleFile),
+                CSVParser.parseFile(updatedFile)
+            ]);
+
+            // Validate data
+            const scheduleValidation = CSVParser.validateData(scheduleData);
+            const updatedValidation = CSVParser.validateData(updatedData);
+
+            if (!scheduleValidation.valid || !updatedValidation.valid) {
+                const errors = [...scheduleValidation.errors, ...updatedValidation.errors].join('\n');
+                this._showError(`Data validation failed:\n${errors}`);
+                return;
+            }
+
+            // Store raw data
+            this.previousScheduleData = scheduleData;
+            this.updatedScheduleData = updatedData;
+
+            console.log('Loaded from manual upload:');
+            console.log('Previous schedule entries:', scheduleData.length);
+            console.log('Updated schedule entries:', updatedData.length);
+            if (scheduleData.length > 0) {
+                console.log('First previous entry:', scheduleData[0]);
+            }
+            if (updatedData.length > 0) {
+                console.log('First updated entry:', updatedData[0]);
+            }
+
+            // Store in localStorage
+            const dateKey = this._getDateKey(this.currentDate);
+            localStorage.setItem(`scheduleData_previous_${dateKey}`, JSON.stringify(scheduleData));
+            localStorage.setItem(`scheduleData_updated_${dateKey}`, JSON.stringify(updatedData));
+
+            // Update file status
+            this._updateFileStatus('uploaded', dateKey);
+
+            // Process and render
+            this._processAndRender();
+
+        } catch (error) {
+            console.error('Error loading files:', error);
+            this._showError(`Error loading files: ${error.message}`);
+        } finally {
+            this._hideLoading();
+        }
+    },
+
+    /**
+     * Update file status in UI
+     * @private
+     */
+    _updateFileStatus(source, dateInfo) {
+        const scheduleFileNameEl = document.getElementById('auditScheduleFileName');
+        const updatedFileNameEl = document.getElementById('auditUpdatedFileName');
+
+        if (source === 'dataFolder') {
+            scheduleFileNameEl.textContent = `Schedule_${dateInfo}.csv (loaded from data folder)`;
+            scheduleFileNameEl.style.color = 'var(--success-color)';
+            updatedFileNameEl.textContent = `Updated_Schedule_${dateInfo}.csv (loaded from data folder)`;
+            updatedFileNameEl.style.color = 'var(--success-color)';
+        } else if (source === 'localStorage') {
+            scheduleFileNameEl.textContent = `Schedule data (loaded from cache for ${dateInfo})`;
+            scheduleFileNameEl.style.color = 'var(--text-secondary)';
+            updatedFileNameEl.textContent = `Updated Schedule data (loaded from cache for ${dateInfo})`;
+            updatedFileNameEl.style.color = 'var(--text-secondary)';
+        } else if (source === 'uploaded') {
+            scheduleFileNameEl.textContent = `Schedule_${dateInfo}.csv (uploaded)`;
+            scheduleFileNameEl.style.color = 'var(--success-color)';
+            updatedFileNameEl.textContent = `Updated_Schedule_${dateInfo}.csv (uploaded)`;
+            updatedFileNameEl.style.color = 'var(--success-color)';
+        } else if (source === 'notFound') {
+            scheduleFileNameEl.textContent = 'No file found - please upload files';
+            scheduleFileNameEl.style.color = 'var(--text-secondary)';
+            updatedFileNameEl.textContent = 'No file found - please upload files';
+            updatedFileNameEl.style.color = 'var(--text-secondary)';
+        }
+    },
+
+    /**
+     * Process data and render audit table
+     * @private
+     */
+    _processAndRender() {
+        if (!this.previousScheduleData || !this.updatedScheduleData) {
+            this._showError('Please load schedule data files first.');
+            return;
+        }
+
+        if (this.previousScheduleData.length === 0 || this.updatedScheduleData.length === 0) {
+            this._showError('Schedule data files are empty. Please check your CSV files.');
+            return;
+        }
+
+        // For audit page, we want to show ALL entries regardless of date
+        // Pass null to disable date filtering - this allows us to see all parsed data
+        const targetDate = null;
+
+        try {
+            // Process both datasets WITHOUT date filtering (show all entries)
+            this.previousData = DataProcessor.processScheduleData(this.previousScheduleData, targetDate);
+            this.updatedData = DataProcessor.processScheduleData(this.updatedScheduleData, targetDate);
+
+            console.log('Processed previous data:', this.previousData);
+            console.log('Processed updated data:', this.updatedData);
+            console.log('Previous processedEntries count:', this.previousData?.processedEntries?.length || 0);
+            console.log('Updated processedEntries count:', this.updatedData?.processedEntries?.length || 0);
+            console.log('Previous raw data count:', this.previousScheduleData?.length || 0);
+            console.log('Updated raw data count:', this.updatedScheduleData?.length || 0);
+            
+            // Debug: Show first few entries if available
+            if (this.previousData?.processedEntries?.length > 0) {
+                console.log('First processed entry (previous):', this.previousData.processedEntries[0]);
+            }
+            if (this.updatedData?.processedEntries?.length > 0) {
+                console.log('First processed entry (updated):', this.updatedData.processedEntries[0]);
+            }
+
+            // Store processed data in localStorage for audit page
+            const dateKey = this._getDateKey(this.currentDate);
+            localStorage.setItem(`auditData_previous_${dateKey}`, JSON.stringify(this.previousData));
+            localStorage.setItem(`auditData_updated_${dateKey}`, JSON.stringify(this.updatedData));
+
+            // Show tabs and table
+            document.getElementById('auditTabsSection').style.display = 'block';
+            document.getElementById('auditTableSection').style.display = 'block';
+            document.getElementById('noDataSection').style.display = 'none';
+
+            // Render initial data (show all data, no filters)
+            this._switchTab('previous');
+
+        } catch (error) {
+            console.error('Error processing data:', error);
+            this._showError(`Error processing data: ${error.message}`);
+        }
+    },
+    
+    /**
+     * Switch between Previous and Updated tabs
      * @private
      */
     _switchTab(tabName) {
@@ -123,181 +494,70 @@ const AuditApp = {
         document.querySelectorAll('.audit-tab').forEach(tab => {
             tab.classList.remove('active');
         });
-        document.getElementById(`tab${tabName === 'previous' ? 'Previous' : 'Arise'}`).classList.add('active');
+        document.getElementById(`tab${tabName === 'previous' ? 'Previous' : 'Updated'}`).classList.add('active');
         
         // Get data for current tab
-        const data = tabName === 'previous' ? this.previousData : this.ariseData;
+        const data = tabName === 'previous' ? this.previousData : this.updatedData;
         
-        if (data && data.processedEntries) {
+        if (data && data.processedEntries && data.processedEntries.length > 0) {
+            console.log(`Rendering ${data.processedEntries.length} entries for ${tabName} tab`);
+            // Show all data - no filters
             AuditRenderer.render(data.processedEntries);
-            this._applyFilters(); // Re-apply filters
         } else {
+            console.warn(`No processed entries found for ${tabName} tab. Data:`, data);
             AuditRenderer.render([]);
         }
     },
-    
+
     /**
-     * Populate filter options from loaded data
+     * Show loading state
      * @private
      */
-    _populateFilterOptions() {
-        if (!this.previousData && !this.ariseData) return;
-        
-        const allEntries = [
-            ...(this.previousData?.processedEntries || []),
-            ...(this.ariseData?.processedEntries || [])
-        ];
-        
-        const teamSet = new Set();
-        const stateSet = new Set();
-        const timezoneSet = new Set();
-        
-        allEntries.forEach(entry => {
-            if (entry.team) teamSet.add(entry.team);
-            if (entry.normalizedState) stateSet.add(entry.normalizedState);
-            if (entry.normalizedTimezone) timezoneSet.add(entry.normalizedTimezone);
-        });
-        
-        const categories = StateConfig.getAllCategories() || [];
-        const groups = StateConfig.getAllGroups() || [];
-        
-        this.filterOptions = {
-            teams: Array.from(teamSet).sort(),
-            states: Array.from(stateSet).sort(),
-            categories: [...categories].sort(),
-            groups: [...groups].sort(),
-            timezones: Array.from(timezoneSet).sort()
-        };
+    _showLoading() {
+        document.getElementById('auditLoadingSection').style.display = 'block';
+        document.getElementById('auditErrorSection').style.display = 'none';
+        document.getElementById('auditTabsSection').style.display = 'none';
+        document.getElementById('auditTableSection').style.display = 'none';
+        document.getElementById('noDataSection').style.display = 'none';
     },
-    
+
     /**
-     * Render filter checkboxes
+     * Hide loading state
      * @private
      */
-    _renderFilters() {
-        if (!this.previousData && !this.ariseData) {
-            document.getElementById('filtersSection').style.display = 'none';
-            return;
-        }
-        
-        document.getElementById('filtersSection').style.display = 'block';
-        
-        // Render each filter type
-        this._renderFilterCheckboxes('auditTeamFilter', 'teams', this.filterOptions.teams);
-        this._renderFilterCheckboxes('auditStateFilter', 'states', this.filterOptions.states);
-        this._renderFilterCheckboxes('auditCategoryFilter', 'categories', this.filterOptions.categories);
-        this._renderFilterCheckboxes('auditGroupFilter', 'groups', this.filterOptions.groups);
-        this._renderFilterCheckboxes('auditTimezoneFilter', 'timezones', this.filterOptions.timezones);
+    _hideLoading() {
+        document.getElementById('auditLoadingSection').style.display = 'none';
     },
-    
+
     /**
-     * Render checkboxes for a filter
+     * Show error message
      * @private
      */
-    _renderFilterCheckboxes(containerId, filterKey, options) {
-        const container = document.getElementById(containerId);
-        if (!container) return;
-        
-        container.innerHTML = '';
-        
-        // Select All / Clear buttons
-        const buttonContainer = document.createElement('div');
-        buttonContainer.className = 'filter-buttons';
-        buttonContainer.style.cssText = 'margin-bottom: 0.5rem; display: flex; gap: 0.5rem;';
-        
-        const selectAllBtn = document.createElement('button');
-        selectAllBtn.type = 'button';
-        selectAllBtn.className = 'btn btn-link';
-        selectAllBtn.textContent = 'Select All';
-        selectAllBtn.style.cssText = 'font-size: 0.75rem; padding: 0.25rem 0.5rem;';
-        selectAllBtn.addEventListener('click', () => {
-            this.filters[filterKey] = new Set(options);
-            this._renderFilterCheckboxes(containerId, filterKey, options);
-            this._applyFilters();
-        });
-        
-        const clearBtn = document.createElement('button');
-        clearBtn.type = 'button';
-        clearBtn.className = 'btn btn-link';
-        clearBtn.textContent = 'Clear';
-        clearBtn.style.cssText = 'font-size: 0.75rem; padding: 0.25rem 0.5rem;';
-        clearBtn.addEventListener('click', () => {
-            this.filters[filterKey] = new Set();
-            this._renderFilterCheckboxes(containerId, filterKey, options);
-            this._applyFilters();
-        });
-        
-        buttonContainer.appendChild(selectAllBtn);
-        buttonContainer.appendChild(clearBtn);
-        container.appendChild(buttonContainer);
-        
-        // Checkboxes
-        const checkboxContainer = document.createElement('div');
-        checkboxContainer.className = 'filter-checkboxes';
-        checkboxContainer.style.cssText = 'max-height: 200px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.5rem;';
-        
-        options.forEach(option => {
-            const label = document.createElement('label');
-            label.className = 'filter-checkbox-item';
-            label.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; cursor: pointer;';
-            
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.value = option;
-            checkbox.checked = this.filters[filterKey].has(option);
-            checkbox.addEventListener('change', (e) => {
-                if (e.target.checked) {
-                    this.filters[filterKey].add(option);
-                } else {
-                    this.filters[filterKey].delete(option);
-                }
-                this._applyFilters();
-            });
-            
-            const span = document.createElement('span');
-            span.textContent = option;
-            span.style.cssText = 'font-size: 0.875rem;';
-            
-            label.appendChild(checkbox);
-            label.appendChild(span);
-            checkboxContainer.appendChild(label);
-        });
-        
-        container.appendChild(checkboxContainer);
+    _showError(message) {
+        document.getElementById('auditErrorMessage').textContent = message;
+        document.getElementById('auditErrorSection').style.display = 'block';
+        document.getElementById('auditLoadingSection').style.display = 'none';
+        document.getElementById('auditTabsSection').style.display = 'none';
+        document.getElementById('auditTableSection').style.display = 'none';
+        document.getElementById('noDataSection').style.display = 'none';
     },
-    
+
     /**
-     * Apply filters to current data
+     * Hide error message
      * @private
      */
-    _applyFilters() {
-        AuditRenderer.applyFilters(this.filters);
+    _hideError() {
+        document.getElementById('auditErrorSection').style.display = 'none';
     },
-    
+
     /**
-     * Clear all filters
+     * Show no data message
      * @private
      */
-    _clearFilters() {
-        this.filters = {
-            teams: new Set(),
-            states: new Set(),
-            categories: new Set(),
-            groups: new Set(),
-            timezones: new Set(),
-            dateRangeStart: null,
-            dateRangeEnd: null
-        };
-        
-        // Clear date inputs
-        document.getElementById('auditDateRangeStart').value = '';
-        document.getElementById('auditDateRangeEnd').value = '';
-        
-        // Re-render filters
-        this._renderFilters();
-        
-        // Re-apply (will show all data)
-        this._applyFilters();
+    _showNoData() {
+        document.getElementById('noDataSection').style.display = 'block';
+        document.getElementById('auditTabsSection').style.display = 'none';
+        document.getElementById('auditTableSection').style.display = 'none';
     },
     
     /**
@@ -319,4 +579,3 @@ if (document.readyState === 'loading') {
 } else {
     AuditApp.init();
 }
-

@@ -384,24 +384,12 @@ const DateUtils = {
      */
     convertToESTWithDate(minutes, sourceTz, dateStr) {
         const TARGET_TZ = 'America/New_York';
-        const SOURCE_TZ = 'Asia/Kolkata';
         
         // Normalize timezone names
         const normalizedSourceTz = this.normalizeTimezone(sourceTz);
         
         // If already in EST/EDT, return same time and date
         if (normalizedSourceTz === TARGET_TZ) {
-            const date = this.parseDate(dateStr);
-            return {
-                minutes: minutes,
-                date: date || new Date()
-            };
-        }
-        
-        // Only convert if source is Asia/Kolkata (IST)
-        // If it's neither, default to no conversion (treat as EST)
-        if (normalizedSourceTz !== SOURCE_TZ) {
-            console.warn(`Unexpected timezone: "${sourceTz}" (normalized: "${normalizedSourceTz}"). Treating as EST/EDT.`);
             const date = this.parseDate(dateStr);
             return {
                 minutes: minutes,
@@ -420,72 +408,115 @@ const DateUtils = {
                 };
             }
 
-            // Convert from IST (Asia/Kolkata) to EST/EDT (America/New_York)
-            // IST is UTC+5:30, EST is UTC-5 (winter) or UTC-4 (EDT, summer)
-            // So IST is 9.5 hours ahead of EST or 10.5 hours ahead of EDT
-            
+            // Generic timezone conversion: Convert from any timezone to EST/EDT
+            // Use Intl.DateTimeFormat to handle all timezones and DST automatically
             const hours = Math.floor(minutes / 60);
             const mins = minutes % 60;
             const year = sourceDate.getFullYear();
             const month = sourceDate.getMonth();
             const day = sourceDate.getDate();
             
-            // IST is UTC+5:30, so convert IST time to UTC first
-            // Subtract 5.5 hours (330 minutes) from IST to get UTC
-            let utcHours = hours;
-            let utcMinutes = mins;
-            utcMinutes -= 330; // Subtract 5.5 hours (330 minutes)
+            // Calculate UTC offset for the source timezone at this specific date
+            // This accounts for DST automatically
+            const sourceFormatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: normalizedSourceTz,
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
             
-            // Handle minute rollover
-            while (utcMinutes < 0) {
-                utcMinutes += 60;
-                utcHours -= 1;
-            }
-            while (utcMinutes >= 60) {
-                utcMinutes -= 60;
-                utcHours += 1;
+            // Create a reference UTC date (midnight UTC on the source date)
+            const referenceUTC = new Date(Date.UTC(year, month, day, 0, 0, 0, 0));
+            
+            // Get what time it is in source timezone when it's midnight UTC
+            const sourceParts = sourceFormatter.formatToParts(referenceUTC);
+            const sourceHour = parseInt(sourceParts.find(p => p.type === 'hour').value, 10);
+            const sourceMin = parseInt(sourceParts.find(p => p.type === 'minute').value, 10);
+            let sourceOffsetMinutes = sourceHour * 60 + sourceMin;
+            
+            // If offset is > 12 hours, it means it's actually the previous day
+            // (e.g., if source shows 18:00 for UTC midnight, source is UTC-6, which is -360 minutes)
+            if (sourceOffsetMinutes > 720) {
+                sourceOffsetMinutes = sourceOffsetMinutes - 1440;
             }
             
-            // Handle hour rollover
-            while (utcHours < 0) {
-                utcHours += 24;
+            // Calculate UTC time: UTC = Source - Offset
+            let utcTotalMinutes = minutes - sourceOffsetMinutes;
+            
+            // Handle day rollover
+            let dayOffset = 0;
+            if (utcTotalMinutes < 0) {
+                dayOffset = -1;
+                utcTotalMinutes += 1440;
+            } else if (utcTotalMinutes >= 1440) {
+                dayOffset = 1;
+                utcTotalMinutes -= 1440;
             }
-            while (utcHours >= 24) {
-                utcHours -= 24;
+            
+            // Convert to hours and minutes
+            let utcHours = Math.floor(utcTotalMinutes / 60);
+            let utcMinutes = utcTotalMinutes % 60;
+            
+            // Adjust date
+            let utcYear = year;
+            let utcMonth = month;
+            let utcDay = day + dayOffset;
+            
+            // Handle month/year rollover
+            if (utcDay < 1) {
+                utcMonth -= 1;
+                if (utcMonth < 0) {
+                    utcMonth = 11;
+                    utcYear -= 1;
+                }
+                const lastDayOfPrevMonth = new Date(utcYear, utcMonth + 1, 0).getDate();
+                utcDay = lastDayOfPrevMonth + utcDay;
+            } else if (utcDay > new Date(utcYear, utcMonth + 1, 0).getDate()) {
+                utcMonth += 1;
+                if (utcMonth > 11) {
+                    utcMonth = 0;
+                    utcYear += 1;
+                }
+                utcDay = utcDay - new Date(utcYear, utcMonth, 0).getDate();
             }
             
             // Create UTC date
-            let utcDate = new Date(Date.UTC(year, month, day, utcHours, utcMinutes, 0, 0));
+            let utcDate = new Date(Date.UTC(utcYear, utcMonth, utcDay, utcHours, utcMinutes, 0, 0));
             
-            // Now convert UTC to EST/EDT using Intl.DateTimeFormat
-            // This automatically handles DST based on the date
-            const targetFormatter = new Intl.DateTimeFormat('en-US', {
-                timeZone: TARGET_TZ,
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
+            // Verify UTC date is valid
+            if (isNaN(utcDate.getTime())) {
+                console.error('Invalid UTC date created:', { utcYear, utcMonth, utcDay, utcHours, utcMinutes });
+                throw new Error('Invalid UTC date calculation');
+            }
+            
+            // Convert UTC to EST/EDT using Intl.DateTimeFormat
+            // This automatically handles DST for all timezones
+            const fullTargetFormatter = new Intl.DateTimeFormat('en-US', {
+                timeZone: TARGET_TZ, // 'America/New_York' - automatically handles DST
                 year: 'numeric',
                 month: '2-digit',
-                day: '2-digit'
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
             });
             
-            // Helper to extract minutes and date from formatted parts
-            const getTimeAndDateFromParts = (parts) => {
-                const hour = parseInt(parts.find(p => p.type === 'hour').value, 10);
-                const minute = parseInt(parts.find(p => p.type === 'minute').value, 10);
-                const year = parseInt(parts.find(p => p.type === 'year').value, 10);
-                const month = parseInt(parts.find(p => p.type === 'month').value, 10) - 1; // Month is 0-indexed
-                const day = parseInt(parts.find(p => p.type === 'day').value, 10);
-                return {
-                    minutes: hour * 60 + minute,
-                    date: new Date(year, month, day)
-                };
-            };
+            // Format the UTC date in EST/EDT timezone
+            const targetParts = fullTargetFormatter.formatToParts(utcDate);
             
-            // Get the EST/EDT time and date for this UTC moment
-            const targetParts = targetFormatter.formatToParts(utcDate);
-            const targetTimeData = getTimeAndDateFromParts(targetParts);
-            let converted = targetTimeData.minutes;
+            // Extract time components
+            const hour = parseInt(targetParts.find(p => p.type === 'hour').value, 10);
+            const minute = parseInt(targetParts.find(p => p.type === 'minute').value, 10);
+            
+            // Extract date components (these are already in EST/EDT timezone)
+            const estYear = parseInt(targetParts.find(p => p.type === 'year').value, 10);
+            const estMonth = parseInt(targetParts.find(p => p.type === 'month').value, 10) - 1; // Month is 0-indexed
+            const estDay = parseInt(targetParts.find(p => p.type === 'day').value, 10);
+            
+            // Create date object with EST/EDT date components
+            const estDate = new Date(estYear, estMonth, estDay);
+            
+            let converted = hour * 60 + minute;
             
             // Handle day rollover
             if (converted < 0) {
@@ -499,7 +530,7 @@ const DateUtils = {
             
             return {
                 minutes: converted,
-                date: targetTimeData.date
+                date: estDate
             };
         } catch (e) {
             console.error(`Error converting IST to EST/EDT:`, e);
@@ -561,30 +592,74 @@ const DateUtils = {
         
         let normalized = tz.trim();
         
-        // Replace underscores with slashes (e.g., "America_New_York" -> "America/New_York")
-        normalized = normalized.replace(/_/g, '/');
+        // Convert to uppercase for comparison (before any replacement)
+        const upperOriginal = normalized.toUpperCase();
         
-        // Convert to uppercase for comparison
-        const upperNormalized = normalized.toUpperCase();
-        
-        // Check for America/New_York (EST/EDT) - case insensitive
-        if (upperNormalized === 'AMERICA/NEW_YORK' || 
-            upperNormalized === 'AMERICA/NEWYORK' ||
-            upperNormalized === 'EST' ||
-            upperNormalized === 'EDT' ||
-            upperNormalized === 'EASTERN') {
+        // Check for America/New_York (EST/EDT) - case insensitive, handle both formats
+        if (upperOriginal === 'AMERICA/NEW_YORK' || 
+            upperOriginal === 'AMERICA_NEW_YORK' ||
+            upperOriginal === 'AMERICA/NEWYORK' ||
+            upperOriginal === 'AMERICA_NEWYORK' ||
+            upperOriginal === 'EST' ||
+            upperOriginal === 'EDT' ||
+            upperOriginal === 'EASTERN') {
             return 'America/New_York';
         }
         
-        // Check for Asia/Kolkata (IST) - case insensitive
-        if (upperNormalized === 'ASIA/KOLKATA' ||
-            upperNormalized === 'ASIA/CALCUTTA' ||
-            upperNormalized === 'IST' ||
-            upperNormalized === 'INDIAN STANDARD TIME') {
+        // Check for Asia/Kolkata (IST) - case insensitive, handle both formats
+        if (upperOriginal === 'ASIA/KOLKATA' ||
+            upperOriginal === 'ASIA_KOLKATA' ||
+            upperOriginal === 'ASIA/CALCUTTA' ||
+            upperOriginal === 'ASIA_CALCUTTA' ||
+            upperOriginal === 'IST' ||
+            upperOriginal === 'INDIAN STANDARD TIME') {
             return 'Asia/Kolkata';
         }
         
-        // If we can't identify it, default to America/New_York and log a warning
+        // Check for America/Denver (Mountain Time) - case insensitive
+        if (upperOriginal === 'AMERICA/DENVER' ||
+            upperOriginal === 'AMERICA_DENVER' ||
+            upperOriginal === 'MST' ||
+            upperOriginal === 'MDT' ||
+            upperOriginal === 'MOUNTAIN') {
+            return 'America/Denver';
+        }
+        
+        // Check for America/Mexico_City - case insensitive, handle typo "Mexico_Cit"
+        if (upperOriginal === 'AMERICA/MEXICO_CITY' ||
+            upperOriginal === 'AMERICA_MEXICO_CITY' ||
+            upperOriginal === 'AMERICA/MEXICO_CIT' ||
+            upperOriginal === 'AMERICA_MEXICO_CIT' ||
+            upperOriginal === 'CST' ||
+            upperOriginal === 'CDT' ||
+            upperOriginal === 'CENTRAL') {
+            return 'America/Mexico_City';
+        }
+        
+        // Check for Asia/Taipei - case insensitive
+        if (upperOriginal === 'ASIA/TAIPEI' ||
+            upperOriginal === 'ASIA_TAIPEI' ||
+            upperOriginal === 'CST' ||
+            upperOriginal === 'TAIWAN') {
+            return 'Asia/Taipei';
+        }
+        
+        // For other timezones, only replace the FIRST underscore with a slash
+        // This handles cases like "America_New_York" -> "America/New_York"
+        // But preserves "America/New_York" as-is
+        if (normalized.includes('_') && !normalized.includes('/')) {
+            // Only replace if there's no slash already (to avoid double conversion)
+            normalized = normalized.replace(/_/, '/');
+        }
+        
+        // Try to validate if it's a valid IANA timezone
+        // If it looks like a valid timezone format, return it as-is
+        if (normalized.includes('/') && normalized.length > 3) {
+            // Looks like a valid IANA timezone (e.g., "America/Denver", "Asia/Taipei")
+            return normalized;
+        }
+        
+        // If we still can't identify it, default to America/New_York and log a warning
         console.warn(`Unknown timezone: "${tz}", normalized to: "${normalized}". Defaulting to America/New_York.`);
         return 'America/New_York';
     },

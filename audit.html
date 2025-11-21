@@ -20,57 +20,54 @@
     </header>
 
     <main class="container">
-        <!-- Filters Section -->
-        <section class="filters-section" id="filtersSection" style="display: none;">
-            <div class="filters-header">
-                <div>
-                    <h3>Audit Filters</h3>
-                    <p>Filter the audit data to view specific records. Changes apply in real-time.</p>
+        <!-- Controls Section -->
+        <section class="controls-section">
+            <div class="date-selector-container">
+                <label for="auditDatePicker">Select Date:</label>
+                <div class="date-navigation">
+                    <button type="button" id="auditPrevDayBtn" class="btn btn-icon" title="Previous Day">
+                        <span style="font-size: 1.2rem;">←</span>
+                    </button>
+                    <input type="date" id="auditDatePicker" class="date-input">
+                    <button type="button" id="auditNextDayBtn" class="btn btn-icon" title="Next Day">
+                        <span style="font-size: 1.2rem;">→</span>
+                    </button>
+                    <button type="button" id="auditTodayBtn" class="btn btn-secondary" title="Go to Today">Today</button>
                 </div>
-                <div class="filters-actions">
-                    <button class="btn btn-secondary" id="clearFiltersBtn" type="button">Clear Filters</button>
+                <button id="auditRefreshDataBtn" class="btn btn-secondary">Refresh from Data Folder</button>
+                <button id="auditLoadDataBtn" class="btn btn-primary">Upload Files Manually</button>
+            </div>
+            
+            <div class="file-upload-container">
+                <div class="file-upload-group">
+                    <label for="auditScheduleFile">Previous Schedule File:</label>
+                    <input type="file" id="auditScheduleFile" accept=".csv" class="file-input">
+                    <span class="file-name" id="auditScheduleFileName">No file selected</span>
+                    <small class="file-help">Auto-loads from: <code>data/Schedule_MMDDYYYY.csv</code></small>
+                </div>
+                <div class="file-upload-group">
+                    <label for="auditUpdatedFile">Updated Schedule File:</label>
+                    <input type="file" id="auditUpdatedFile" accept=".csv" class="file-input">
+                    <span class="file-name" id="auditUpdatedFileName">No file selected</span>
+                    <small class="file-help">Auto-loads from: <code>data/Updated_Schedule_MMDDYYYY.csv</code></small>
                 </div>
             </div>
-
-            <div class="filters-grid">
-                <div class="filter-group">
-                    <label for="auditTeamFilter">Teams</label>
-                    <div class="filter-checkbox-container" id="auditTeamFilter"></div>
-                </div>
-                <div class="filter-group">
-                    <label for="auditStateFilter">Schedule States</label>
-                    <div class="filter-checkbox-container" id="auditStateFilter"></div>
-                </div>
-                <div class="filter-group">
-                    <label for="auditCategoryFilter">Schedule State Type (Category)</label>
-                    <div class="filter-checkbox-container" id="auditCategoryFilter"></div>
-                </div>
-                <div class="filter-group">
-                    <label for="auditGroupFilter">Schedule State Group</label>
-                    <div class="filter-checkbox-container" id="auditGroupFilter"></div>
-                </div>
-                <div class="filter-group">
-                    <label for="auditTimezoneFilter">Timezone</label>
-                    <div class="filter-checkbox-container" id="auditTimezoneFilter"></div>
-                </div>
-                <div class="filter-group">
-                    <label for="auditDateRangeStart">Date Range Start</label>
-                    <input type="date" id="auditDateRangeStart" class="date-input">
-                </div>
-                <div class="filter-group">
-                    <label for="auditDateRangeEnd">Date Range End</label>
-                    <input type="date" id="auditDateRangeEnd" class="date-input">
-                </div>
-            </div>
-
-            <small class="filter-hint">Filters apply immediately when you change a selection.</small>
         </section>
 
-        <!-- Tabs for Previous/After Arise -->
+        <section class="loading-section" id="auditLoadingSection" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Processing schedule data...</p>
+        </section>
+
+        <section class="error-section" id="auditErrorSection" style="display: none;">
+            <div class="error-message" id="auditErrorMessage"></div>
+        </section>
+
+        <!-- Tabs for Previous/Updated -->
         <section class="audit-tabs-section" id="auditTabsSection" style="display: none;">
             <div class="audit-tabs">
                 <button class="audit-tab active" data-tab="previous" id="tabPrevious">Previous Schedule</button>
-                <button class="audit-tab" data-tab="arise" id="tabArise">After Arise Schedule</button>
+                <button class="audit-tab" data-tab="updated" id="tabUpdated">Updated Schedule</button>
             </div>
         </section>
 
@@ -97,8 +94,8 @@
         <section class="no-data-section" id="noDataSection">
             <div class="no-data-message">
                 <h2>No Data Available</h2>
-                <p>Please load schedule data from the <a href="index.html">Dashboard</a> page first.</p>
-                <p class="no-data-hint">The audit page requires processed schedule data to display entries and calculations.</p>
+                <p>Please select a date and load schedule data files to view the audit.</p>
+                <p class="no-data-hint">You can upload files manually or refresh from the data folder.</p>
             </div>
         </section>
     </main>
@@ -109,8 +106,11 @@
         </div>
     </footer>
 
+    <script src="lib/papaparse.min.js"></script>
     <script src="js/dateUtils.js"></script>
     <script src="js/stateConfig.js"></script>
+    <script src="js/csvParser.js"></script>
+    <script src="js/dataProcessor.js"></script>
     <script src="js/auditRenderer.js"></script>
     <script src="js/auditApp.js"></script>
 </body>

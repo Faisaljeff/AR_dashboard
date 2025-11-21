@@ -10,9 +10,9 @@ Place your schedule CSV files in this folder with the following naming pattern:
   - Example: `Schedule_01012025.csv` for January 1, 2025
   - Example: `Schedule_11172025.csv` for November 17, 2025
 
-- **After Arise Schedule**: `Arise_Schedule_MMDDYYYY.csv`
-  - Example: `Arise_Schedule_01012025.csv` for January 1, 2025
-  - Example: `Arise_Schedule_11172025.csv` for November 17, 2025
+- **Updated Schedule**: `Updated_Schedule_MMDDYYYY.csv`
+  - Example: `Updated_Schedule_01012025.csv` for January 1, 2025
+  - Example: `Updated_Schedule_11172025.csv` for November 17, 2025
 
 ## Date Format
 
@@ -52,5 +52,5 @@ Your CSV files should have the following columns (in order):
 ## Example Files
 
 - `Schedule_11172025.csv` - Previous schedule for November 17, 2025
-- `Arise_Schedule_11172025.csv` - After Arise schedule for November 17, 2025
+- `Updated_Schedule_11172025.csv` - Updated schedule for November 17, 2025
 

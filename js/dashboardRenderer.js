@@ -7,9 +7,9 @@ const DashboardRenderer = {
     /**
      * Render multiple dashboards, one per visible Schedule State Group
      * @param {Object} previousData - Processed previous schedule data
-     * @param {Object} ariseData - Processed arise schedule data
+     * @param {Object} updatedData - Processed updated schedule data
      */
-    render(previousData, ariseData) {
+    render(previousData, updatedData) {
         const container = document.getElementById('dashboardsContainer');
         container.innerHTML = '';
 
@@ -86,25 +86,25 @@ const DashboardRenderer = {
             console.log(`Dashboard Render: Rendering dashboard for group: "${groupName}"`);
             console.log(`Dashboard Render: States in group:`, stateNames);
             console.log(`Dashboard Render: Previous data all states:`, Object.keys(previousData.stateTotals || {}));
-            console.log(`Dashboard Render: Arise data all states:`, Object.keys(ariseData.stateTotals || {}));
+            console.log(`Dashboard Render: Updated data all states:`, Object.keys(updatedData.stateTotals || {}));
             
             // Filter data to only include states in this group
             const filteredPrevious = DataProcessor.filterByStates(previousData, stateNames);
-            const filteredArise = DataProcessor.filterByStates(ariseData, stateNames);
+            const filteredUpdated = DataProcessor.filterByStates(updatedData, stateNames);
 
             console.log(`Dashboard Render: Group "${groupName}" - Previous filtered states:`, Object.keys(filteredPrevious.stateTotals));
-            console.log(`Dashboard Render: Group "${groupName}" - Arise filtered states:`, Object.keys(filteredArise.stateTotals));
+            console.log(`Dashboard Render: Group "${groupName}" - Updated filtered states:`, Object.keys(filteredUpdated.stateTotals));
 
             // Always render the dashboard if it's set to visible, even if empty
             // This allows users to see all selected dashboards
             const hasData = Object.keys(filteredPrevious.stateTotals).length > 0 || 
-                           Object.keys(filteredArise.stateTotals).length > 0;
+                           Object.keys(filteredUpdated.stateTotals).length > 0;
             
             if (!hasData) {
                 console.log(`Dashboard Render: Group "${groupName}" has no data, but rendering empty dashboard since it's visible`);
             }
 
-            const dashboardSection = this._createDashboardSection(groupName, filteredPrevious, filteredArise, stateNames);
+            const dashboardSection = this._createDashboardSection(groupName, filteredPrevious, filteredUpdated, stateNames);
             container.appendChild(dashboardSection);
         });
 
@@ -119,7 +119,7 @@ const DashboardRenderer = {
      * Create a dashboard section for a specific group
      * @private
      */
-    _createDashboardSection(groupName, previousData, ariseData, stateNames) {
+    _createDashboardSection(groupName, previousData, updatedData, stateNames) {
         const section = document.createElement('section');
         section.className = 'dashboard-section';
         section.id = `dashboard_${this._sanitizeId(groupName)}`;
@@ -153,7 +153,7 @@ const DashboardRenderer = {
         headerRight.style.cssText = 'display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;';
         
         // Summary stats for this group
-        const summaryStats = this._renderSummaryStats(previousData, ariseData, stateNames);
+        const summaryStats = this._renderSummaryStats(previousData, updatedData, stateNames);
         headerRight.appendChild(summaryStats);
 
         // Timezone indicator
@@ -173,12 +173,12 @@ const DashboardRenderer = {
         const prevColumn = this._createScheduleColumn('Previous Schedule', `prev_${this._sanitizeId(groupName)}`, previousData, stateNames);
         dashboardContainer.appendChild(prevColumn);
 
-        // After Arise Schedule column
-        const ariseColumn = this._createScheduleColumn('After Arise Schedule', `arise_${this._sanitizeId(groupName)}`, ariseData, stateNames);
-        dashboardContainer.appendChild(ariseColumn);
+        // Updated Schedule column
+        const updatedColumn = this._createScheduleColumn('Updated Schedule', `updated_${this._sanitizeId(groupName)}`, updatedData, stateNames);
+        dashboardContainer.appendChild(updatedColumn);
 
         // Set up synchronized scrolling between the two table containers
-        this._setupSynchronizedScrolling(prevColumn, ariseColumn, groupName);
+        this._setupSynchronizedScrolling(prevColumn, updatedColumn, groupName);
 
         section.appendChild(header);
         section.appendChild(dashboardContainer);
@@ -187,7 +187,7 @@ const DashboardRenderer = {
     },
 
     /**
-     * Create a schedule column (Previous or After Arise)
+     * Create a schedule column (Previous or Updated)
      * Only includes columns for states that have data in any interval
      * @private
      */
@@ -299,24 +299,24 @@ const DashboardRenderer = {
      * Only shows cards for states that have data (duration > 0 or agents > 0)
      * @private
      */
-    _renderSummaryStats(previousData, ariseData, stateNames) {
+    _renderSummaryStats(previousData, updatedData, stateNames) {
         const summaryContainer = document.createElement('div');
         summaryContainer.className = 'summary-stats';
 
         stateNames.forEach(stateName => {
             const prev = previousData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
-            const arise = ariseData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
+            const updated = updatedData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
             
-            // Only show card if there's data in either prev or arise
+            // Only show card if there's data in either prev or updated
             const hasData = (prev.totalDuration > 0 || prev.totalAgents > 0) || 
-                           (arise.totalDuration > 0 || arise.totalAgents > 0);
+                           (updated.totalDuration > 0 || updated.totalAgents > 0);
             
             if (!hasData) {
                 return; // Skip this card
             }
             
-            const durationDiff = arise.totalDuration - prev.totalDuration;
-            const agentsDiff = arise.totalAgents - prev.totalAgents;
+            const durationDiff = updated.totalDuration - prev.totalDuration;
+            const agentsDiff = updated.totalAgents - prev.totalAgents;
 
             const card = document.createElement('div');
             card.className = 'stat-card';
@@ -324,7 +324,7 @@ const DashboardRenderer = {
                 <div class="stat-label">${stateName}</div>
                 <div class="stat-value">
                     Prev: ${DateUtils.formatDuration(prev.totalDuration)} (${prev.totalAgents} agents)<br>
-                    Arise: ${DateUtils.formatDuration(arise.totalDuration)} (${arise.totalAgents} agents)<br>
+                    Updated: ${DateUtils.formatDuration(updated.totalDuration)} (${updated.totalAgents} agents)<br>
                     <small style="color: ${durationDiff >= 0 ? 'var(--success-color)' : 'var(--danger-color)'}">
                         Δ: ${durationDiff >= 0 ? '+' : ''}${DateUtils.formatDuration(durationDiff)} (${agentsDiff >= 0 ? '+' : ''}${agentsDiff} agents)
                     </small>
@@ -401,30 +401,30 @@ const DashboardRenderer = {
      * Set up synchronized scrolling between two table containers
      * @private
      */
-    _setupSynchronizedScrolling(prevColumn, ariseColumn, groupName) {
+    _setupSynchronizedScrolling(prevColumn, updatedColumn, groupName) {
         const prevTableContainer = prevColumn.querySelector('.table-container');
-        const ariseTableContainer = ariseColumn.querySelector('.table-container');
+        const updatedTableContainer = updatedColumn.querySelector('.table-container');
         
-        if (!prevTableContainer || !ariseTableContainer) return;
+        if (!prevTableContainer || !updatedTableContainer) return;
 
         let isScrolling = false;
 
-        // Sync Previous to After Arise
+        // Sync Previous to Updated
         prevTableContainer.addEventListener('scroll', () => {
             if (!isScrolling) {
                 isScrolling = true;
-                ariseTableContainer.scrollTop = prevTableContainer.scrollTop;
-                ariseTableContainer.scrollLeft = prevTableContainer.scrollLeft;
+                updatedTableContainer.scrollTop = prevTableContainer.scrollTop;
+                updatedTableContainer.scrollLeft = prevTableContainer.scrollLeft;
                 setTimeout(() => { isScrolling = false; }, 10);
             }
         });
 
-        // Sync After Arise to Previous
-        ariseTableContainer.addEventListener('scroll', () => {
+        // Sync Updated to Previous
+        updatedTableContainer.addEventListener('scroll', () => {
             if (!isScrolling) {
                 isScrolling = true;
-                prevTableContainer.scrollTop = ariseTableContainer.scrollTop;
-                prevTableContainer.scrollLeft = ariseTableContainer.scrollLeft;
+                prevTableContainer.scrollTop = updatedTableContainer.scrollTop;
+                prevTableContainer.scrollLeft = updatedTableContainer.scrollLeft;
                 setTimeout(() => { isScrolling = false; }, 10);
             }
         });
