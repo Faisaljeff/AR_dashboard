@@ -245,8 +245,8 @@ const App = {
 
                 // Store in localStorage for future use
                 const dateKey = this._getDateKey(this.currentDate);
-                localStorage.setItem(`scheduleData_previous_${dateKey}`, JSON.stringify(scheduleData));
-                localStorage.setItem(`scheduleData_updated_${dateKey}`, JSON.stringify(updatedData));
+                this._safeStoreInLocalStorage(`scheduleData_previous_${dateKey}`, scheduleData);
+                this._safeStoreInLocalStorage(`scheduleData_updated_${dateKey}`, updatedData);
 
                 // Update UI
                 this._updateFileStatus('dataFolder', dateStr);
@@ -351,8 +351,8 @@ const App = {
 
             // Store in localStorage
             const dateKey = this._getDateKey(this.currentDate);
-            localStorage.setItem(`scheduleData_previous_${dateKey}`, JSON.stringify(scheduleData));
-            localStorage.setItem(`scheduleData_updated_${dateKey}`, JSON.stringify(updatedData));
+            this._safeStoreInLocalStorage(`scheduleData_previous_${dateKey}`, scheduleData);
+            this._safeStoreInLocalStorage(`scheduleData_updated_${dateKey}`, updatedData);
 
             // Update file status
             this._updateFileStatus('uploaded', dateKey);
@@ -471,17 +471,17 @@ const App = {
         
         try {
             // Store audit data with processed entries
-            localStorage.setItem(`auditData_previous_${dateKey}`, JSON.stringify({
+            this._safeStoreInLocalStorage(`auditData_previous_${dateKey}`, {
                 processedEntries: this.processedPrevious.processedEntries || [],
                 metadata: this.processedPrevious.metadata || {},
                 timestamp: new Date().toISOString()
-            }));
+            });
             
-            localStorage.setItem(`auditData_updated_${dateKey}`, JSON.stringify({
+            this._safeStoreInLocalStorage(`auditData_updated_${dateKey}`, {
                 processedEntries: this.processedUpdated.processedEntries || [],
                 metadata: this.processedUpdated.metadata || {},
                 timestamp: new Date().toISOString()
-            }));
+            });
             
             console.log('App: Audit data stored for date:', dateKey);
         } catch (e) {
@@ -860,6 +860,91 @@ const App = {
 
             return true;
         });
+    },
+
+    /**
+     * Clear old localStorage data to free up space
+     * Keeps only the current date's data
+     * @private
+     */
+    _clearOldLocalStorageData(currentDateKey) {
+        const keysToKeep = new Set([
+            `scheduleData_previous_${currentDateKey}`,
+            `scheduleData_updated_${currentDateKey}`,
+            `auditData_previous_${currentDateKey}`,
+            `auditData_updated_${currentDateKey}`,
+            'scheduleConfig',
+            'scheduleCategories',
+            'scheduleGroups',
+            'dashboardVisibility',
+            'dashboardOrder',
+            'userPrefs'
+        ]);
+
+        // Clear all schedule and audit data except current date
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('scheduleData_') || key.startsWith('auditData_')) && !keysToKeep.has(key)) {
+                localStorage.removeItem(key);
+            }
+        }
+    },
+
+    /**
+     * Clear all localStorage data (last resort when quota is exceeded)
+     * @private
+     */
+    _clearAllLocalStorageData() {
+        const keysToKeep = new Set([
+            'scheduleConfig',
+            'scheduleCategories',
+            'scheduleGroups',
+            'dashboardVisibility',
+            'dashboardOrder',
+            'userPrefs'
+        ]);
+
+        // Clear all schedule and audit data, keep only config
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('scheduleData_') || key.startsWith('auditData_')) && !keysToKeep.has(key)) {
+                localStorage.removeItem(key);
+            }
+        }
+    },
+
+    /**
+     * Safely store data in localStorage with quota error handling
+     * @private
+     */
+    _safeStoreInLocalStorage(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+            if (e.name === 'QuotaExceededError') {
+                console.warn(`LocalStorage quota exceeded for key: ${key}. Clearing old data...`);
+                const dateKey = this._getDateKey(this.currentDate);
+                this._clearOldLocalStorageData(dateKey);
+                try {
+                    localStorage.setItem(key, JSON.stringify(value));
+                } catch (e2) {
+                    if (e2.name === 'QuotaExceededError') {
+                        console.warn('Still exceeded after clearing old data. Clearing all schedule data...');
+                        this._clearAllLocalStorageData();
+                        try {
+                            localStorage.setItem(key, JSON.stringify(value));
+                        } catch (e3) {
+                            console.error('Failed to store data even after clearing all:', e3);
+                            DashboardRenderer.showWarning('LocalStorage is full. Data loaded but could not be cached. Please clear browser data or reload files on next visit.');
+                        }
+                    } else {
+                        throw e2;
+                    }
+                }
+            } else {
+                throw e;
+            }
+        }
     }
 };
 

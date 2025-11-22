@@ -292,8 +292,8 @@ const AuditApp = {
 
                 // Store in localStorage for future use
                 const dateKey = this._getDateKey(this.currentDate);
-                localStorage.setItem(`scheduleData_previous_${dateKey}`, JSON.stringify(scheduleData));
-                localStorage.setItem(`scheduleData_updated_${dateKey}`, JSON.stringify(updatedData));
+                this._safeStoreInLocalStorage(`scheduleData_previous_${dateKey}`, scheduleData);
+                this._safeStoreInLocalStorage(`scheduleData_updated_${dateKey}`, updatedData);
 
                 // Update UI (use dateStr without cache-busting parameter)
                 this._updateFileStatus('dataFolder', dateStr);
@@ -377,8 +377,8 @@ const AuditApp = {
 
             // Store in localStorage
             const dateKey = this._getDateKey(this.currentDate);
-            localStorage.setItem(`scheduleData_previous_${dateKey}`, JSON.stringify(scheduleData));
-            localStorage.setItem(`scheduleData_updated_${dateKey}`, JSON.stringify(updatedData));
+            this._safeStoreInLocalStorage(`scheduleData_previous_${dateKey}`, scheduleData);
+            this._safeStoreInLocalStorage(`scheduleData_updated_${dateKey}`, updatedData);
 
             // Update file status
             this._updateFileStatus('uploaded', dateKey);
@@ -466,8 +466,8 @@ const AuditApp = {
 
             // Store processed data in localStorage for audit page
             const dateKey = this._getDateKey(this.currentDate);
-            localStorage.setItem(`auditData_previous_${dateKey}`, JSON.stringify(this.previousData));
-            localStorage.setItem(`auditData_updated_${dateKey}`, JSON.stringify(this.updatedData));
+            this._safeStoreInLocalStorage(`auditData_previous_${dateKey}`, this.previousData);
+            this._safeStoreInLocalStorage(`auditData_updated_${dateKey}`, this.updatedData);
 
             // Show tabs and table
             document.getElementById('auditTabsSection').style.display = 'block';
