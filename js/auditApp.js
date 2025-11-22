@@ -305,7 +305,7 @@ const AuditApp = {
 
             } else {
                 // Files not found in data folder
-                if (!scheduleOk && !ariseOk) {
+                if (!scheduleOk && !updatedOk) {
                     // Both files missing - this is expected, will fall back to localStorage
                 } else if (!scheduleOk) {
                     this._showError(`Previous schedule file not found: ${scheduleFileName}`);

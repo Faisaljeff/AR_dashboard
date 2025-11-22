@@ -258,7 +258,7 @@ const App = {
 
             } else {
                 // Files not found in data folder - provide helpful message
-                if (!scheduleOk && !ariseOk) {
+                if (!scheduleOk && !updatedOk) {
                     // Both files missing - this is expected, will fall back to localStorage
                 } else if (!scheduleOk) {
                     DashboardRenderer.showError(`Previous schedule file not found: ${scheduleFileName}`);
