@@ -570,6 +570,90 @@ const AuditApp = {
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}${month}${day}`;
+    },
+
+    /**
+     * Clear old localStorage data for dates other than current
+     * @private
+     */
+    _clearOldLocalStorageData(currentDateKey) {
+        const keysToKeep = new Set([
+            `scheduleData_previous_${currentDateKey}`,
+            `scheduleData_updated_${currentDateKey}`,
+            `auditData_previous_${currentDateKey}`,
+            `auditData_updated_${currentDateKey}`,
+            'scheduleConfig',
+            'scheduleCategories',
+            'scheduleGroups',
+            'dashboardVisibility',
+            'dashboardOrder',
+            'userPrefs'
+        ]);
+
+        // Clear all schedule and audit data except current date
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('scheduleData_') || key.startsWith('auditData_')) && !keysToKeep.has(key)) {
+                localStorage.removeItem(key);
+            }
+        }
+    },
+
+    /**
+     * Clear all localStorage data (last resort when quota is exceeded)
+     * @private
+     */
+    _clearAllLocalStorageData() {
+        const keysToKeep = new Set([
+            'scheduleConfig',
+            'scheduleCategories',
+            'scheduleGroups',
+            'dashboardVisibility',
+            'dashboardOrder',
+            'userPrefs'
+        ]);
+
+        // Clear all schedule and audit data, keep only config
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('scheduleData_') || key.startsWith('auditData_')) && !keysToKeep.has(key)) {
+                localStorage.removeItem(key);
+            }
+        }
+    },
+
+    /**
+     * Safely store data in localStorage with quota error handling
+     * @private
+     */
+    _safeStoreInLocalStorage(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+            if (e.name === 'QuotaExceededError') {
+                console.warn(`LocalStorage quota exceeded for key: ${key}. Clearing old data...`);
+                const dateKey = this._getDateKey(this.currentDate);
+                this._clearOldLocalStorageData(dateKey);
+                try {
+                    localStorage.setItem(key, JSON.stringify(value));
+                } catch (e2) {
+                    if (e2.name === 'QuotaExceededError') {
+                        console.warn('Still exceeded after clearing old data. Clearing all schedule data...');
+                        this._clearAllLocalStorageData();
+                        try {
+                            localStorage.setItem(key, JSON.stringify(value));
+                        } catch (e3) {
+                            console.error('Failed to store data even after clearing all:', e3);
+                            this._showError('LocalStorage is full. Data loaded but could not be cached. Please clear browser data or reload files on next visit.');
+                        }
+                    } else {
+                        throw e2;
+                    }
+                }
+            } else {
+                throw e;
+            }
+        }
     }
 };
 
