@@ -446,12 +446,33 @@ const StateConfig = {
     },
 
     /**
-     * Get all available groups (default + custom)
+     * Get all available groups.
+     *
+     * IMPORTANT:
+     *  - Previously this was limited to DEFAULT_GROUPS + customGroups.
+     *  - That meant if a new Schedule State used a new group name that wasn't
+     *    in those arrays yet, the dashboard would never show a section for it.
+     *
+     *  - Now we also scan all configured states and include ANY group value
+     *    we find there. This makes the dashboards automatically adapt to
+     *    newly created schedule groups without code changes.
+     *
      * @returns {Array} Array of group names
      */
     getAllGroups() {
         const customGroups = this.getCustomGroups();
-        const allGroups = [...this.DEFAULT_GROUPS, ...customGroups];
+        const states = this.getAllStates();
+
+        const dynamicGroupsFromStates = states
+            .map(s => (s.group || '').trim())
+            .filter(g => g.length > 0);
+
+        const allGroups = [
+            ...this.DEFAULT_GROUPS,
+            ...customGroups,
+            ...dynamicGroupsFromStates
+        ];
+
         // Remove duplicates and sort
         return [...new Set(allGroups)].sort();
     },
@@ -541,11 +562,32 @@ const StateConfig = {
         try {
             const stored = localStorage.getItem(this.DASHBOARD_VISIBILITY_KEY);
             if (stored) {
-                return JSON.parse(stored);
+                const visibility = JSON.parse(stored);
+
+                // Ensure any new groups that weren't present when the
+                // visibility map was first created are also visible by default.
+                const allGroups = this.getAllGroups();
+                let changed = false;
+                allGroups.forEach(group => {
+                    if (visibility[group] === undefined) {
+                        visibility[group] = true;
+                        changed = true;
+                    }
+                });
+
+                // Optionally, we could clean up groups that no longer exist,
+                // but leaving them does no harm and keeps backwards-compat.
+                if (changed) {
+                    this._saveDashboardVisibility(visibility);
+                }
+
+                return visibility;
             }
-            // Default: all dashboards visible
+
+            // No stored visibility yet: default to *all* known groups visible
             const defaultVisibility = {};
-            this.DEFAULT_GROUPS.forEach(group => {
+            const allGroups = this.getAllGroups();
+            allGroups.forEach(group => {
                 defaultVisibility[group] = true;
             });
             return defaultVisibility;
