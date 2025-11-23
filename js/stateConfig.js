@@ -144,62 +144,25 @@ const StateConfig = {
             return exactMatch.name; // Return the configured state name (preserves casing)
         }
 
-        // Step 2: Check for keyword matches
-        // Extract base keywords from state names and check if input contains them
-        const normalizedInputLower = normalizedInput.toLowerCase();
-        
-        // Sort states by name length (longer names first) to match more specific states first
-        // This ensures "Break Time" is checked before "Break"
-        const sortedStates = [...allStates].sort((a, b) => b.name.length - a.name.length);
-        
-        for (const state of sortedStates) {
-            // Check if this state has matching exceptions
-            // If input contains any exception pattern, skip this state from keyword matching
-            const exceptions = this._MATCHING_EXCEPTIONS[state.name];
-            if (exceptions && Array.isArray(exceptions)) {
-                let hasException = false;
-                for (const exceptionPattern of exceptions) {
-                    if (normalizedInputLower.includes(exceptionPattern.toLowerCase())) {
-                        // Input contains an exception pattern - skip this state
-                        console.log(`State matching: "${stateName}" → Skipping "${state.name}" (contains exception pattern: "${exceptionPattern}")`);
-                        hasException = true;
-                        break;
-                    }
-                }
-                if (hasException) {
-                    continue; // Skip to next state
-                }
-            }
-            
-            // Extract base words from state name (remove special chars, numbers, etc.)
-            // For "Break", extract ["break"]
-            // For "Break Time", extract ["break", "time", "breaktime"]
-            const baseWords = this._extractBaseWords(state.name);
-            
-            // Check if any base word from the state name appears in the input
-            // Use word boundary matching to avoid false positives (e.g., "breakfast" shouldn't match "Break")
-            for (const word of baseWords) {
-                if (word.length >= 3) {
-                    // Escape special regex characters in the word
-                    const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    
-                    // Create a regex pattern that matches the word as a whole word or after special chars
-                    // This matches "break" in "break- 10 minutes" or "Break 15 Mins"
-                    // Pattern: word at start, or after non-letter, and followed by non-letter or end
-                    const wordPattern = new RegExp(`(^|[^a-z])${escapedWord}([^a-z]|$)`, 'i');
-                    
-                    if (wordPattern.test(normalizedInput)) {
-                        // Found a keyword match
-                        console.log(`State matching: "${stateName}" → "${state.name}" (matched keyword: "${word}")`);
-                        return state.name; // Return the configured state name
-                    }
-                }
-            }
-        }
-
-        // Step 3: No match found, return original name
-        // This allows the system to still process states that aren't configured
-        console.log(`State matching: "${stateName}" → No match found, using original name`);
+        // IMPORTANT CHANGE:
+        // We intentionally DISABLE fuzzy keyword matching here.
+        //
+        // Previously, we tried to map CSV labels like
+        //   "Break 15MINS / 6:15 - 7:00"
+        // to a configured state "Break" using word-based heuristics.
+        //
+        // That heuristic was also collapsing distinct schedule states
+        // (e.g., different ABSENCE or TIME OFF variations) into a single
+        // normalized state, which inflated dashboard totals and made them
+        // diverge from the audit page and Excel.
+        //
+        // New behavior:
+        //  - If there is an exact configured state with this name, we use it.
+        //  - Otherwise we treat the CSV label as its own state and return it
+        //    unchanged. This guarantees that each unique label is tracked
+        //    separately, and prevents accidental auto-tagging.
+        //
+        console.log(`State matching: "${stateName}" → No exact config match, using original label as state name`);
         return normalizedInput;
     },
 
