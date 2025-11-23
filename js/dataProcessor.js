@@ -377,11 +377,25 @@ const DataProcessor = {
             }
             const dayOverlapMinutes = Math.max(0, actualEndMinutes - clampedStartMinutes);
 
-            // Proportional allocation factor: CSV minutes per EST minute of span
-            const allocationScale = csvDurationMinutes / spanMinutesEST;
-
-            // Duration contribution that belongs to THIS EST day
-            const durationForTotals = Math.round(dayOverlapMinutes * allocationScale);
+            // CRITICAL FIX: Use CSV duration directly when row falls entirely on target date
+            // Only use proportional allocation when row spans multiple days
+            let durationForTotals;
+            
+            // Check if row was clamped (meaning it spans beyond the target date)
+            const wasClamped = (clampedStartMinutes !== startMinutes || clampedEndMinutes !== endMinutes);
+            
+            if (!wasClamped && targetDateEST) {
+                // Row falls entirely on target date - use CSV duration directly (no allocation needed)
+                durationForTotals = csvDurationMinutes;
+            } else if (!targetDateEST) {
+                // No date filter (audit page) - use CSV duration directly
+                durationForTotals = csvDurationMinutes;
+            } else {
+                // Row spans multiple days - use proportional allocation
+                // Proportional allocation factor: CSV minutes per EST minute of span
+                const allocationScale = csvDurationMinutes / spanMinutesEST;
+                durationForTotals = Math.round(dayOverlapMinutes * allocationScale);
+            }
             
             // Create entry metadata for audit page
             const entryMetadata = {
