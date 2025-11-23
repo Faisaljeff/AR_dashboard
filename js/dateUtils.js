@@ -64,11 +64,24 @@ const DateUtils = {
 
     /**
      * Parse time string and detect if it belongs to the next day using "+" notation
-     * Examples:
-     *  - "+02:00 AM"  -> { minutes: 120, dayOffset: 1 }
-     *  - "02:00 AM +" -> { minutes: 120, dayOffset: 1 }
-     *  - "02:00 AM +2" -> { minutes: 120, dayOffset: 2 }
-     *  - "02:00 AM"   -> { minutes: 120, dayOffset: 0 }
+     *
+     * Supported formats:
+     *  - "+02:00 AM"        -> { minutes: 120, dayOffset: 1 }
+     *  - "+1 02:00 AM"      -> { minutes: 120, dayOffset: 1 } (explicit day offset)
+     *  - "02:00 AM +"       -> { minutes: 120, dayOffset: 1 }
+     *  - "02:00 AM +2"      -> { minutes: 120, dayOffset: 2 }
+     *  - "02:00 AM"         -> { minutes: 120, dayOffset: 0 }
+     *
+     * IMPORTANT:
+     * The previous implementation treated the digits after a leading "+"
+     * as a *day* offset even when they were actually the hour portion of the time,
+     * e.g. "+12:45 AM" was interpreted as "12 days offset" instead of
+     * "next day at 12:45 AM". This caused huge date shifts (11+ days) and
+     * nonsense durations. The logic below fixes that by:
+     *  - Treating patterns like "+HH:MM" as "+1 day" with time "HH:MM"
+     *  - Only using the numeric part as day offset when it is clearly
+     *    separated from the time (e.g. "+2 02:00 AM" or "02:00 AM +2")
+     *
      * @param {string} timeStr
      * @returns {{minutes: number|null, dayOffset: number}}
      */
@@ -84,24 +97,52 @@ const DateUtils = {
             return { minutes: null, dayOffset };
         }
 
-        // Detect "+" prefix (e.g., "+02:00 AM" or "+1 02:00 AM")
-        const prefixMatch = trimmed.match(/^\+\s*(\d+)?\s*/);
-        if (prefixMatch) {
-            const offset = prefixMatch[1] ? parseInt(prefixMatch[1], 10) : 1;
-            if (!isNaN(offset)) {
-                dayOffset = offset;
+        // Handle "+" prefix
+        // Cases:
+        //  - "+12:45 AM"   -> next day, time "12:45 AM"
+        //  - "+1 12:45 AM" -> +1 day, time "12:45 AM"
+        if (trimmed.startsWith('+')) {
+            // Try to match "+HH:MM..." pattern (implicit +1 day)
+            const plusTimeMatch = trimmed.match(/^\+\s*(\d{1,2}:\d{2}.*)$/i);
+            if (plusTimeMatch) {
+                dayOffset = 1;
+                trimmed = plusTimeMatch[1].trim(); // e.g. "12:45 AM"
+            } else {
+                // Try "+N <time>" where N is explicit day offset
+                const plusDaysMatch = trimmed.match(/^\+\s*(\d+)\s+(.*)$/i);
+                if (plusDaysMatch) {
+                    const offset = parseInt(plusDaysMatch[1], 10);
+                    if (!isNaN(offset) && offset > 0) {
+                        dayOffset = offset;
+                    } else {
+                        dayOffset = 1;
+                    }
+                    trimmed = plusDaysMatch[2].trim();
+                } else {
+                    // Fallback: treat leading "+" as "+1 day" and remove it
+                    dayOffset = 1;
+                    trimmed = trimmed.slice(1).trim();
+                }
             }
-            trimmed = trimmed.slice(prefixMatch[0].length).trim();
         }
 
-        // Detect "+" suffix (e.g., "02:00 AM +" or "02:00 AM +1")
-        const suffixMatch = trimmed.match(/(\+\s*(\d+)?)$/);
+        // Handle "+" suffix
+        // Cases:
+        //  - "02:00 AM +"   -> +1 day
+        //  - "02:00 AM +2"  -> +2 days
+        const suffixMatch = trimmed.match(/^(.+?)\s*\+\s*(\d+)?$/);
         if (suffixMatch) {
-            const offset = suffixMatch[2] ? parseInt(suffixMatch[2], 10) : 1;
-            if (dayOffset === 0 && !isNaN(offset)) {
-                dayOffset = offset;
+            trimmed = suffixMatch[1].trim();
+            const offsetStr = suffixMatch[2];
+            if (offsetStr) {
+                const offset = parseInt(offsetStr, 10);
+                if (!isNaN(offset) && offset > 0) {
+                    dayOffset = offset;
+                }
+            } else if (dayOffset === 0) {
+                // If we don't already have a prefix-based offset, default to +1
+                dayOffset = 1;
             }
-            trimmed = trimmed.slice(0, suffixMatch.index).trim();
         }
 
         const minutes = this.parseTimeToMinutes(trimmed);
