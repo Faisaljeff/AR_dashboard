@@ -54,6 +54,112 @@
             </div>
         </section>
 
+        <!-- Filters Section -->
+        <section class="filters-section" id="auditFiltersSection" style="display: none;">
+            <div class="filters-header">
+                <div>
+                    <h3>Audit Filters</h3>
+                    <p>Filter audit entries by team, state, category, group, timezone, or date range.</p>
+                </div>
+                <div class="filters-actions">
+                    <button class="btn btn-secondary" id="auditClearFiltersBtn" type="button">Clear Filters</button>
+                </div>
+            </div>
+
+            <div class="filters-grid">
+                <div class="filter-card" data-filter="teams">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Teams</label>
+                            <small>Choose one or more teams</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link audit-filter-select-all" data-filter-key="teams">Select All</button>
+                            <button type="button" class="btn btn-link audit-filter-clear" data-filter-key="teams">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="auditTeamFilterOptions"></div>
+                </div>
+
+                <div class="filter-card" data-filter="states">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Schedule States</label>
+                            <small>Filter by specific schedule states</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link audit-filter-select-all" data-filter-key="states">Select All</button>
+                            <button type="button" class="btn btn-link audit-filter-clear" data-filter-key="states">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="auditStateFilterOptions"></div>
+                </div>
+
+                <div class="filter-card" data-filter="categories">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Schedule State Category</label>
+                            <small>Breaks, meetings, leave, etc.</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link audit-filter-select-all" data-filter-key="categories">Select All</button>
+                            <button type="button" class="btn btn-link audit-filter-clear" data-filter-key="categories">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="auditCategoryFilterOptions"></div>
+                </div>
+
+                <div class="filter-card" data-filter="groups">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Schedule State Group</label>
+                            <small>Dashboard groups such as Absence, Break, System, etc.</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link audit-filter-select-all" data-filter-key="groups">Select All</button>
+                            <button type="button" class="btn btn-link audit-filter-clear" data-filter-key="groups">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="auditGroupFilterOptions"></div>
+                </div>
+
+                <div class="filter-card" data-filter="timezones">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Timezone</label>
+                            <small>Filter by source timezone</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link audit-filter-select-all" data-filter-key="timezones">Select All</button>
+                            <button type="button" class="btn btn-link audit-filter-clear" data-filter-key="timezones">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="auditTimezoneFilterOptions"></div>
+                </div>
+
+                <div class="filter-card" data-filter="dateRange">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Date Range (Source)</label>
+                            <small>Limit audit entries to a specific date range</small>
+                        </div>
+                    </div>
+                    <div class="filter-options audit-date-range-options">
+                        <div class="date-range-field">
+                            <label for="auditDateRangeStart">From</label>
+                            <input type="date" id="auditDateRangeStart" class="date-input">
+                        </div>
+                        <div class="date-range-field">
+                            <label for="auditDateRangeEnd">To</label>
+                            <input type="date" id="auditDateRangeEnd" class="date-input">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <small class="filter-hint">Filters apply immediately when you change a selection.</small>
+        </section>
+
         <section class="loading-section" id="auditLoadingSection" style="display: none;">
             <div class="loading-spinner"></div>
             <p>Processing schedule data...</p>
