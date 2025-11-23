@@ -388,11 +388,22 @@ const DataProcessor = {
             // Check if row was clamped (meaning it spans beyond the target date)
             const wasClamped = (clampedStartMinutes !== startMinutes || clampedEndMinutes !== endMinutes);
             
-            if (!wasClamped && targetDateEST) {
-                // Row falls entirely on target date - use CSV duration directly (no allocation needed)
-                durationForTotals = csvDurationMinutes;
-            } else if (!targetDateEST) {
+            // Check if both start and end dates match the target date
+            const startMatchesTarget = targetDateEST ? 
+                (startDateEST.getFullYear() === targetDateEST.year &&
+                 startDateEST.getMonth() === targetDateEST.month &&
+                 startDateEST.getDate() === targetDateEST.day) : true;
+            const endMatchesTarget = targetDateEST ?
+                (endDateEST.getFullYear() === targetDateEST.year &&
+                 endDateEST.getMonth() === targetDateEST.month &&
+                 endDateEST.getDate() === targetDateEST.day) : true;
+            const entirelyOnTargetDate = startMatchesTarget && endMatchesTarget;
+            
+            if (!targetDateEST) {
                 // No date filter (audit page) - use CSV duration directly
+                durationForTotals = csvDurationMinutes;
+            } else if (entirelyOnTargetDate && !wasClamped) {
+                // Row falls entirely on target date and wasn't clamped - use CSV duration directly
                 durationForTotals = csvDurationMinutes;
             } else {
                 // Row spans multiple days - use proportional allocation
@@ -458,6 +469,11 @@ const DataProcessor = {
             stateStats.totalDuration += durationForTotals;
             stateStats.totalAgents.add(entry.agent);
             stateStats.totalCount += 1;
+            
+            // Debug logging for specific states
+            if (stateName && (stateName.toLowerCase().includes('sick') || stateName.toLowerCase().includes('absence'))) {
+                console.log(`[DEBUG] State: "${stateName}", Agent: "${entry.agent}", CSV Duration: ${csvDurationMinutes}min (${DateUtils.formatDuration(csvDurationMinutes)}), durationForTotals: ${durationForTotals}min (${DateUtils.formatDuration(durationForTotals)}), wasClamped: ${wasClamped}, entirelyOnTarget: ${entirelyOnTargetDate}, dayOverlap: ${dayOverlapMinutes}min, span: ${spanMinutesEST}min, scale: ${allocationScale.toFixed(4)}`);
+            }
 
             // Calculate which intervals this entry overlaps
             // Use clamped times to ensure we only count overlap within the target date
@@ -471,7 +487,7 @@ const DataProcessor = {
                     interval.endMinutes
                 );
 
-                    if (overlap > 0) {
+                if (overlap > 0) {
                     // Additional check: if we have a target date, verify the interval date matches
                     // Since intervals are always for the selected date, we just need to ensure
                     // the entry's time range (after conversion) overlaps with the day
@@ -494,6 +510,13 @@ const DataProcessor = {
         console.log(`DataProcessor: Processed ${processedCount} entries, skipped ${skippedCount} entries`);
         console.log(`DataProcessor: State totals found:`, Array.from(stateMap.keys()));
         console.log(`DataProcessor: Total unique states:`, stateMap.size);
+        
+        // Debug: Log totals for states containing "sick" or "absence"
+        stateMap.forEach((stats, stateName) => {
+            if (stateName && (stateName.toLowerCase().includes('sick') || stateName.toLowerCase().includes('absence'))) {
+                console.log(`[DEBUG TOTAL] State: "${stateName}", Total Duration: ${stats.totalDuration}min (${DateUtils.formatDuration(stats.totalDuration)}), Count: ${stats.totalCount}, Agents: ${stats.totalAgents.size}`);
+            }
+        });
 
         // Convert Maps to plain objects for serialization
         const processedIntervals = intervalData.map(item => {
