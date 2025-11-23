@@ -306,64 +306,82 @@ const DataProcessor = {
                 }
             }
 
-            // Calculate EST duration properly accounting for date differences
-            // Duration should be calculated from actual EST dates and times, not clamped times
-            // This ensures duration remains constant regardless of timezone conversion
-            let durationEST;
-            
-            // Calculate duration from actual EST dates and times (not clamped)
-            // Account for day differences between start and end dates
+            // ------------------------------------------------------------------
+            // DURATION CALCULATION STRATEGY
+            //
+            // IMPORTANT: The CSV Duration column is the source of truth.
+            //  - We only use times / timezones to decide WHERE the duration
+            //    falls on the EST timeline (which day, which intervals).
+            //  - We DO NOT recompute the "amount" of duration from EST times
+            //    except as a sanity check.
+            //
+            // Steps:
+            //  1) Build EST Date objects for start and end.
+            //  2) Compute the full EST span in minutes (spanMinutesEST).
+            //  3) Parse CSV duration into minutes (csvDurationMinutes).
+            //  4) For this specific target date, compute how many EST minutes
+            //     of the span fall on that date (dayOverlapMinutes).
+            //  5) Allocate a proportional share of csvDurationMinutes to this
+            //     day and its 30‑minute intervals:
+            //        scale = csvDurationMinutes / spanMinutesEST
+            //        contributionForDay = dayOverlapMinutes * scale
+            // ------------------------------------------------------------------
+
+            // 1) Build EST Date objects from converted minutes
             const startDateTime = new Date(startDateEST);
             startDateTime.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
             
             const endDateTime = new Date(endDateEST);
             endDateTime.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
             
-            // If end time is earlier than start time on the same date, end is actually next day
-            // Check if dates are the same but endMinutes < startMinutes
-            const sameDate = startDateEST.getTime() === endDateEST.getTime() || 
-                            (startDateEST.getFullYear() === endDateEST.getFullYear() &&
-                             startDateEST.getMonth() === endDateEST.getMonth() &&
-                             startDateEST.getDate() === endDateEST.getDate());
-            
-            if (sameDate && endMinutes < startMinutes) {
-                // End is on the next day
+            // If end time is earlier than or equal to start time on the same date,
+            // treat it as next day (span that crosses midnight).
+            if (endDateTime.getTime() <= startDateTime.getTime()) {
                 endDateTime.setDate(endDateTime.getDate() + 1);
             }
             
-            // Calculate duration in milliseconds, then convert to minutes
-            const durationMs = endDateTime.getTime() - startDateTime.getTime();
-            durationEST = Math.round(durationMs / (1000 * 60));
-            
-            // Ensure non-negative duration
-            if (durationEST < 0) {
-                // This shouldn't happen, but if it does, try adding 24 hours
-                durationEST = durationEST + 1440;
+            // 2) Full EST span in minutes
+            const fullSpanMs = endDateTime.getTime() - startDateTime.getTime();
+            let spanMinutesEST = Math.round(fullSpanMs / (1000 * 60));
+            if (!Number.isFinite(spanMinutesEST) || spanMinutesEST <= 0) {
+                // Fallback: treat as at least 1 minute to avoid division by zero
+                spanMinutesEST = 1;
             }
-            
-            // For state totals, use clamped times when filtering by date (for accurate partial-day calculations)
-            // But for audit page display, we want the actual duration
+
+            // 3) Parse CSV duration into minutes (source of truth)
+            let csvDurationMinutes = null;
+            if (entry.duration && typeof entry.duration === 'string') {
+                const durationStr = entry.duration.trim();
+                if (durationStr) {
+                    // Expect formats like "H:MM", "HH:MM", "275:50", optionally with seconds "H:MM:SS"
+                    const durationMatch = durationStr.match(/^(-?\d+):(\d{2})(?::(\d{2}))?$/);
+                    if (durationMatch) {
+                        const hours = parseInt(durationMatch[1], 10) || 0;
+                        const mins = parseInt(durationMatch[2], 10) || 0;
+                        const secs = parseInt(durationMatch[3] || '0', 10) || 0;
+                        csvDurationMinutes = hours * 60 + mins + Math.round(secs / 60);
+                    }
+                }
+            }
+
+            // If CSV duration is missing or unparsable, fall back to EST span
+            if (csvDurationMinutes === null) {
+                csvDurationMinutes = spanMinutesEST;
+            }
+
+            // 4) For state totals on this target date, use clamped times to get
+            //    how many EST minutes of this span overlap the selected day.
             let actualEndMinutes = clampedEndMinutes;
             if (clampedEndMinutes < clampedStartMinutes) {
                 actualEndMinutes = clampedEndMinutes + 1440; // Add 24 hours
             }
-            const durationForTotals = actualEndMinutes - clampedStartMinutes;
-            
-            // Parse source duration from CSV
-            const durationSourceMinutes = entry.duration ? DateUtils.parseTimeToMinutes(entry.duration) : null;
-            // If parseTimeToMinutes returns null or doesn't work for duration format, try alternative
-            let sourceDuration = durationSourceMinutes;
-            if (sourceDuration === null && entry.duration) {
-                // Try parsing as duration format (e.g., "1:30:00" or "90:00")
-                const durationStr = entry.duration.trim();
-                const durationMatch = durationStr.match(/(\d+):(\d+)(?::(\d+))?/);
-                if (durationMatch) {
-                    const hours = parseInt(durationMatch[1], 10) || 0;
-                    const mins = parseInt(durationMatch[2], 10) || 0;
-                    const secs = parseInt(durationMatch[3], 10) || 0;
-                    sourceDuration = hours * 60 + mins + Math.round(secs / 60);
-                }
-            }
+            const dayOverlapMinutes = Math.max(0, actualEndMinutes - clampedStartMinutes);
+
+            // Proportional allocation factor: CSV minutes per EST minute of span
+            const allocationScale = csvDurationMinutes / spanMinutesEST;
+
+            // Duration contribution that belongs to THIS EST day
+            const durationForTotals = Math.round(dayOverlapMinutes * allocationScale);
             
             // Create entry metadata for audit page
             const entryMetadata = {
@@ -381,12 +399,11 @@ const DataProcessor = {
                 timezone: entry.timezone || '',
                 normalizedTimezone: normalizedTz,
                 
-                // Source duration (from CSV)
-                durationSourceMinutes: sourceDuration,
+                // Source duration (from CSV - this is the truth)
+                durationSourceMinutes: csvDurationMinutes,
                 
                 // EST/EDT converted values
-                // For display, use actual EST times (not clamped) so duration calculations are accurate
-                // Clamped times are only used for state totals when filtering by date
+                // For display, use actual EST times (not clamped)
                 startESTMinutes: startMinutes,
                 endESTMinutes: endMinutes,
                 startESTDate: DateUtils.formatDate(startDateEST),
@@ -394,11 +411,14 @@ const DataProcessor = {
                 endESTDate: DateUtils.formatDate(endDateEST),
                 endESTTime: DateUtils.minutesToTimeString(endMinutes),
                 
-                // Calculated EST duration (from actual dates/times, not clamped)
-                durationESTMinutes: durationEST,
+                // Calculated EST duration
+                // NOTE: Duration does NOT change with timezone, so this should
+                //       always match durationSourceMinutes when CSV is correct.
+                durationESTMinutes: csvDurationMinutes,
                 
-                // Comparison - should be 0 or very close to 0 since duration doesn't change with timezone
-                durationDifference: sourceDuration !== null ? (durationEST - sourceDuration) : null,
+                // Comparison: difference between EST span and CSV duration.
+                // This surfaces data issues without affecting totals.
+                durationDifference: spanMinutesEST - csvDurationMinutes,
                 
                 // Processing flags
                 wasClamped: clampedStartMinutes !== startMinutes || clampedEndMinutes !== endMinutes,
@@ -427,7 +447,7 @@ const DataProcessor = {
             // Use clamped times to ensure we only count overlap within the target date
             intervals.forEach((interval, index) => {
                 // Calculate overlap using clamped times
-                // This ensures entries spanning multiple days only count the portion on the target date
+                // This gives us how many EST minutes of this entry fall into the interval
                 const overlap = DateUtils.calculateOverlap(
                     clampedStartMinutes,
                     actualEndMinutes,
@@ -435,7 +455,7 @@ const DataProcessor = {
                     interval.endMinutes
                 );
 
-                if (overlap > 0) {
+                    if (overlap > 0) {
                     // Additional check: if we have a target date, verify the interval date matches
                     // Since intervals are always for the selected date, we just need to ensure
                     // the entry's time range (after conversion) overlaps with the day
@@ -448,7 +468,8 @@ const DataProcessor = {
                     }
 
                     const stateEntry = intervalEntry.states.get(stateName);
-                    stateEntry.totalDuration += overlap;
+                    // Allocate a proportional share of the CSV duration to this interval
+                    stateEntry.totalDuration += overlap * allocationScale;
                     stateEntry.agentSet.add(entry.agent);
                 }
             });
