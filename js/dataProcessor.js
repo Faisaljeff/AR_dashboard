@@ -306,14 +306,48 @@ const DataProcessor = {
                 }
             }
 
-            // Handle end time that might be next day (for duration calculation)
+            // Calculate EST duration properly accounting for date differences
+            // Duration should be calculated from actual EST dates and times, not clamped times
+            // This ensures duration remains constant regardless of timezone conversion
+            let durationEST;
+            
+            // Calculate duration from actual EST dates and times (not clamped)
+            // Account for day differences between start and end dates
+            const startDateTime = new Date(startDateEST);
+            startDateTime.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
+            
+            const endDateTime = new Date(endDateEST);
+            endDateTime.setHours(Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
+            
+            // If end time is earlier than start time on the same date, end is actually next day
+            // Check if dates are the same but endMinutes < startMinutes
+            const sameDate = startDateEST.getTime() === endDateEST.getTime() || 
+                            (startDateEST.getFullYear() === endDateEST.getFullYear() &&
+                             startDateEST.getMonth() === endDateEST.getMonth() &&
+                             startDateEST.getDate() === endDateEST.getDate());
+            
+            if (sameDate && endMinutes < startMinutes) {
+                // End is on the next day
+                endDateTime.setDate(endDateTime.getDate() + 1);
+            }
+            
+            // Calculate duration in milliseconds, then convert to minutes
+            const durationMs = endDateTime.getTime() - startDateTime.getTime();
+            durationEST = Math.round(durationMs / (1000 * 60));
+            
+            // Ensure non-negative duration
+            if (durationEST < 0) {
+                // This shouldn't happen, but if it does, try adding 24 hours
+                durationEST = durationEST + 1440;
+            }
+            
+            // For state totals, use clamped times when filtering by date (for accurate partial-day calculations)
+            // But for audit page display, we want the actual duration
             let actualEndMinutes = clampedEndMinutes;
             if (clampedEndMinutes < clampedStartMinutes) {
                 actualEndMinutes = clampedEndMinutes + 1440; // Add 24 hours
             }
-
-            // Update state totals (using clamped times for accurate duration on target date)
-            const duration = actualEndMinutes - clampedStartMinutes;
+            const durationForTotals = actualEndMinutes - clampedStartMinutes;
             
             // Parse source duration from CSV
             const durationSourceMinutes = entry.duration ? DateUtils.parseTimeToMinutes(entry.duration) : null;
@@ -351,18 +385,20 @@ const DataProcessor = {
                 durationSourceMinutes: sourceDuration,
                 
                 // EST/EDT converted values
-                startESTMinutes: clampedStartMinutes,
-                endESTMinutes: clampedEndMinutes,
+                // For display, use actual EST times (not clamped) so duration calculations are accurate
+                // Clamped times are only used for state totals when filtering by date
+                startESTMinutes: startMinutes,
+                endESTMinutes: endMinutes,
                 startESTDate: DateUtils.formatDate(startDateEST),
-                startESTTime: DateUtils.minutesToTimeString(clampedStartMinutes),
+                startESTTime: DateUtils.minutesToTimeString(startMinutes),
                 endESTDate: DateUtils.formatDate(endDateEST),
-                endESTTime: DateUtils.minutesToTimeString(clampedEndMinutes),
+                endESTTime: DateUtils.minutesToTimeString(endMinutes),
                 
-                // Calculated EST duration
-                durationESTMinutes: duration,
+                // Calculated EST duration (from actual dates/times, not clamped)
+                durationESTMinutes: durationEST,
                 
-                // Comparison
-                durationDifference: sourceDuration !== null ? (duration - sourceDuration) : null,
+                // Comparison - should be 0 or very close to 0 since duration doesn't change with timezone
+                durationDifference: sourceDuration !== null ? (durationEST - sourceDuration) : null,
                 
                 // Processing flags
                 wasClamped: clampedStartMinutes !== startMinutes || clampedEndMinutes !== endMinutes,
@@ -383,7 +419,7 @@ const DataProcessor = {
                 });
             }
             const stateStats = stateMap.get(stateName);
-            stateStats.totalDuration += duration;
+            stateStats.totalDuration += durationForTotals;
             stateStats.totalAgents.add(entry.agent);
             stateStats.totalCount += 1;
 
