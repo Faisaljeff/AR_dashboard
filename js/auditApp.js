@@ -10,6 +10,24 @@ const AuditApp = {
     updatedScheduleData: null,
     previousData: null,
     updatedData: null,
+
+    // Filter state for audit page
+    filters: {
+        teams: new Set(),
+        states: new Set(),
+        categories: new Set(),
+        groups: new Set(),
+        timezones: new Set(),
+        dateRangeStart: null,
+        dateRangeEnd: null
+    },
+    filterOptions: {
+        teams: [],
+        states: [],
+        categories: [],
+        groups: [],
+        timezones: []
+    },
     
     /**
      * Initialize the audit page
@@ -111,6 +129,9 @@ const AuditApp = {
         document.getElementById('exportCsvBtn').addEventListener('click', () => {
             AuditRenderer.exportToCSV();
         });
+
+        // Set up filter controls
+        this._setupFilterControls();
     },
 
     /**
@@ -469,6 +490,9 @@ const AuditApp = {
             this._safeStoreInLocalStorage(`auditData_previous_${dateKey}`, this.previousData);
             this._safeStoreInLocalStorage(`auditData_updated_${dateKey}`, this.updatedData);
 
+            // Populate filter options based on processed data
+            this._populateFilterOptions();
+
             // Show tabs and table
             document.getElementById('auditTabsSection').style.display = 'block';
             document.getElementById('auditTableSection').style.display = 'block';
@@ -501,8 +525,10 @@ const AuditApp = {
         
         if (data && data.processedEntries && data.processedEntries.length > 0) {
             console.log(`Rendering ${data.processedEntries.length} entries for ${tabName} tab`);
-            // Show all data - no filters
+            // First render all data so AuditRenderer has a baseline
             AuditRenderer.render(data.processedEntries);
+            // Then apply any active filters
+            this._applyFiltersToAudit();
         } else {
             console.warn(`No processed entries found for ${tabName} tab. Data:`, data);
             AuditRenderer.render([]);
@@ -558,6 +584,245 @@ const AuditApp = {
         document.getElementById('noDataSection').style.display = 'block';
         document.getElementById('auditTabsSection').style.display = 'none';
         document.getElementById('auditTableSection').style.display = 'none';
+    },
+
+    /**
+     * Set up filter controls for the audit page
+     * @private
+     */
+    _setupFilterControls() {
+        const filtersSection = document.getElementById('auditFiltersSection');
+        if (filtersSection) {
+            // Checkbox changes
+            filtersSection.addEventListener('change', (event) => {
+                const target = event.target;
+                if (target && target.classList.contains('audit-filter-checkbox')) {
+                    this._handleFilterCheckboxChange(target);
+                }
+                if (target && (target.id === 'auditDateRangeStart' || target.id === 'auditDateRangeEnd')) {
+                    this._handleDateRangeChange();
+                }
+            });
+
+            // Select all / Clear links
+            filtersSection.addEventListener('click', (event) => {
+                const target = event.target;
+                if (!target) return;
+
+                if (target.classList.contains('audit-filter-select-all')) {
+                    event.preventDefault();
+                    const filterKey = target.dataset.filterKey;
+                    this._selectAllFilter(filterKey);
+                } else if (target.classList.contains('audit-filter-clear')) {
+                    event.preventDefault();
+                    const filterKey = target.dataset.filterKey;
+                    this._clearFilter(filterKey);
+                }
+            });
+        }
+
+        const clearBtn = document.getElementById('auditClearFiltersBtn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this._clearAllFilters());
+        }
+    },
+
+    /**
+     * Build available filter options from processed data
+     * @private
+     */
+    _populateFilterOptions() {
+        if (!this.previousData || !this.updatedData) return;
+
+        const combined = [
+            ...(this.previousData.processedEntries || []),
+            ...(this.updatedData.processedEntries || [])
+        ];
+
+        const teamSet = new Set();
+        const stateSet = new Set();
+        const timezoneSet = new Set();
+
+        combined.forEach(entry => {
+            if (entry.team) {
+                teamSet.add(entry.team);
+            }
+            if (entry.normalizedState) {
+                stateSet.add(entry.normalizedState);
+            }
+            if (entry.normalizedTimezone) {
+                timezoneSet.add(entry.normalizedTimezone);
+            }
+        });
+
+        const categories = StateConfig.getAllCategories() || [];
+        const groups = StateConfig.getAllGroups() || [];
+
+        this.filterOptions = {
+            teams: Array.from(teamSet).sort((a, b) => a.localeCompare(b)),
+            states: Array.from(stateSet).sort((a, b) => a.localeCompare(b)),
+            categories: [...categories].sort((a, b) => a.localeCompare(b)),
+            groups: [...groups].sort((a, b) => a.localeCompare(b)),
+            timezones: Array.from(timezoneSet).sort((a, b) => a.localeCompare(b))
+        };
+
+        // Ensure existing selections only include available values
+        const syncSelection = (key) => {
+            const available = new Set(this.filterOptions[key]);
+            this.filters[key] = new Set(Array.from(this.filters[key]).filter(value => available.has(value)));
+        };
+        syncSelection('teams');
+        syncSelection('states');
+        syncSelection('categories');
+        syncSelection('groups');
+        syncSelection('timezones');
+
+        // Show filters section now that we have options
+        const filtersSection = document.getElementById('auditFiltersSection');
+        if (filtersSection) {
+            filtersSection.style.display = 'block';
+        }
+
+        this._renderFilterOptions();
+    },
+
+    /**
+     * Render filter checkboxes into the UI
+     * @private
+     */
+    _renderFilterOptions() {
+        const renderOptions = (containerId, options, filterKey) => {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            container.innerHTML = '';
+            options.forEach(value => {
+                const id = `audit_${filterKey}_${value.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                const wrapper = document.createElement('label');
+                wrapper.className = 'filter-option';
+                wrapper.innerHTML = `
+                    <input type="checkbox" class="audit-filter-checkbox" id="${id}" data-filter-key="${filterKey}" value="${value}">
+                    <span>${value}</span>
+                `;
+
+                // Restore selection
+                if (this.filters[filterKey] && this.filters[filterKey].has(value)) {
+                    wrapper.querySelector('input').checked = true;
+                }
+
+                container.appendChild(wrapper);
+            });
+        };
+
+        renderOptions('auditTeamFilterOptions', this.filterOptions.teams, 'teams');
+        renderOptions('auditStateFilterOptions', this.filterOptions.states, 'states');
+        renderOptions('auditCategoryFilterOptions', this.filterOptions.categories, 'categories');
+        renderOptions('auditGroupFilterOptions', this.filterOptions.groups, 'groups');
+        renderOptions('auditTimezoneFilterOptions', this.filterOptions.timezones, 'timezones');
+
+        // Apply filters after re-rendering options to keep view in sync
+        this._applyFiltersToAudit();
+    },
+
+    /**
+     * Handle checkbox change for a specific filter
+     * @param {HTMLInputElement} checkbox
+     * @private
+     */
+    _handleFilterCheckboxChange(checkbox) {
+        const key = checkbox.dataset.filterKey;
+        const value = checkbox.value;
+        if (!key || !value) return;
+
+        const set = this.filters[key] || new Set();
+        if (checkbox.checked) {
+            set.add(value);
+        } else {
+            set.delete(value);
+        }
+        this.filters[key] = set;
+
+        this._applyFiltersToAudit();
+    },
+
+    /**
+     * Handle date range change
+     * @private
+     */
+    _handleDateRangeChange() {
+        const startInput = document.getElementById('auditDateRangeStart');
+        const endInput = document.getElementById('auditDateRangeEnd');
+
+        this.filters.dateRangeStart = startInput?.value || null;
+        this.filters.dateRangeEnd = endInput?.value || null;
+
+        this._applyFiltersToAudit();
+    },
+
+    /**
+     * Clear a specific filter key (e.g., teams, states)
+     * @param {string} key
+     * @private
+     */
+    _clearFilter(key) {
+        if (!key || !this.filters[key]) return;
+        this.filters[key] = new Set();
+        this._renderFilterOptions();
+    },
+
+    /**
+     * Select all options for a specific filter key
+     * @param {string} key
+     * @private
+     */
+    _selectAllFilter(key) {
+        if (!key || !this.filterOptions[key]) return;
+        this.filters[key] = new Set(this.filterOptions[key]);
+        this._renderFilterOptions();
+    },
+
+    /**
+     * Clear all filters at once
+     * @private
+     */
+    _clearAllFilters() {
+        this.filters = {
+            teams: new Set(),
+            states: new Set(),
+            categories: new Set(),
+            groups: new Set(),
+            timezones: new Set(),
+            dateRangeStart: null,
+            dateRangeEnd: null
+        };
+
+        // Reset date range inputs
+        const startInput = document.getElementById('auditDateRangeStart');
+        const endInput = document.getElementById('auditDateRangeEnd');
+        if (startInput) startInput.value = '';
+        if (endInput) endInput.value = '';
+
+        this._renderFilterOptions();
+    },
+
+    /**
+     * Apply current filters to the AuditRenderer data
+     * @private
+     */
+    _applyFiltersToAudit() {
+        if (!AuditRenderer || !AuditRenderer.currentData) return;
+
+        const filters = {
+            teams: this.filters.teams,
+            states: this.filters.states,
+            categories: this.filters.categories,
+            groups: this.filters.groups,
+            timezones: this.filters.timezones,
+            dateRangeStart: this.filters.dateRangeStart,
+            dateRangeEnd: this.filters.dateRangeEnd
+        };
+
+        AuditRenderer.applyFilters(filters);
     },
     
     /**
