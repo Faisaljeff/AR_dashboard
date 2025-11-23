@@ -377,6 +377,10 @@ const DataProcessor = {
             }
             const dayOverlapMinutes = Math.max(0, actualEndMinutes - clampedStartMinutes);
 
+            // Calculate allocation scale: CSV minutes per EST minute of span
+            // This is needed for both state totals and interval allocation
+            const allocationScale = spanMinutesEST > 0 ? csvDurationMinutes / spanMinutesEST : 0;
+
             // CRITICAL FIX: Use CSV duration directly when row falls entirely on target date
             // Only use proportional allocation when row spans multiple days
             let durationForTotals;
@@ -392,8 +396,6 @@ const DataProcessor = {
                 durationForTotals = csvDurationMinutes;
             } else {
                 // Row spans multiple days - use proportional allocation
-                // Proportional allocation factor: CSV minutes per EST minute of span
-                const allocationScale = csvDurationMinutes / spanMinutesEST;
                 durationForTotals = Math.round(dayOverlapMinutes * allocationScale);
             }
             
