@@ -442,6 +442,12 @@ const DataProcessor = {
                 // NOTE: Duration does NOT change with timezone, so this should
                 //       always match durationSourceMinutes when CSV is correct.
                 durationESTMinutes: csvDurationMinutes,
+                durationAppliedMinutes: durationForTotals,
+                dayOverlapMinutes,
+                spanMinutesEST,
+                allocationScale,
+                clampedStartMinutes,
+                clampedEndMinutes,
                 
                 // Comparison: difference between EST span and CSV duration.
                 // This surfaces data issues without affecting totals.

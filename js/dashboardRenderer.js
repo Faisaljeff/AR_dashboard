@@ -303,9 +303,11 @@ const DashboardRenderer = {
         const summaryContainer = document.createElement('div');
         summaryContainer.className = 'summary-stats';
 
-        stateNames.forEach(stateName => {
+        stateNames.forEach((stateName, idx) => {
             const prev = previousData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
             const updated = updatedData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
+            const prevBreakdown = this._buildStateBreakdown(previousData, stateName);
+            const updatedBreakdown = this._buildStateBreakdown(updatedData, stateName);
             
             // Only show card if there's data in either prev or updated
             const hasData = (prev.totalDuration > 0 || prev.totalAgents > 0) || 
@@ -317,6 +319,7 @@ const DashboardRenderer = {
             
             const durationDiff = updated.totalDuration - prev.totalDuration;
             const agentsDiff = updated.totalAgents - prev.totalAgents;
+            const detailsId = `state-details-${this._sanitizeId(stateName)}-${idx}`;
 
             const card = document.createElement('div');
             card.className = 'stat-card';
@@ -329,11 +332,179 @@ const DashboardRenderer = {
                         Δ: ${durationDiff >= 0 ? '+' : ''}${DateUtils.formatDuration(durationDiff)} (${agentsDiff >= 0 ? '+' : ''}${agentsDiff} agents)
                     </small>
                 </div>
+                <div class="card-breakdown-summary">
+                    ${this._renderBreakdownSummary('Previous', prevBreakdown)}
+                    ${this._renderBreakdownSummary('Updated', updatedBreakdown)}
+                </div>
+                <button class="details-toggle" data-target="${detailsId}" type="button">Show details</button>
+                <div class="card-details" id="${detailsId}" hidden>
+                    ${this._renderBreakdownDetails(prevBreakdown, updatedBreakdown, stateName)}
+                </div>
             `;
+
+            const toggleBtn = card.querySelector('.details-toggle');
+            const detailsEl = card.querySelector(`#${detailsId}`);
+            if (toggleBtn && detailsEl) {
+                toggleBtn.addEventListener('click', () => {
+                    const isHidden = detailsEl.hasAttribute('hidden');
+                    if (isHidden) {
+                        detailsEl.removeAttribute('hidden');
+                        toggleBtn.textContent = 'Hide details';
+                        toggleBtn.setAttribute('aria-expanded', 'true');
+                    } else {
+                        detailsEl.setAttribute('hidden', '');
+                        toggleBtn.textContent = 'Show details';
+                        toggleBtn.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            }
             summaryContainer.appendChild(card);
         });
 
         return summaryContainer;
+    },
+
+    /**
+     * Build a breakdown summary for a specific state within processed data
+     * @private
+     */
+    _buildStateBreakdown(processedData, stateName) {
+        const fallback = {
+            rows: 0,
+            totalSourceMinutes: 0,
+            totalAppliedMinutes: 0,
+            entries: []
+        };
+
+        if (!processedData || !Array.isArray(processedData.processedEntries)) {
+            return fallback;
+        }
+
+        const entries = processedData.processedEntries.filter(entry => {
+            if (!entry) return false;
+            return (entry.normalizedState || entry.scheduleState || '').toLowerCase() === stateName.toLowerCase();
+        });
+
+        if (entries.length === 0) {
+            return fallback;
+        }
+
+        let totalSourceMinutes = 0;
+        let totalAppliedMinutes = 0;
+
+        entries.forEach(entry => {
+            const source = Number.isFinite(entry.durationSourceMinutes) ? entry.durationSourceMinutes : 0;
+            const applied = Number.isFinite(entry.durationAppliedMinutes) 
+                ? entry.durationAppliedMinutes 
+                : source;
+            totalSourceMinutes += source;
+            totalAppliedMinutes += applied;
+        });
+
+        return {
+            rows: entries.length,
+            totalSourceMinutes,
+            totalAppliedMinutes,
+            entries
+        };
+    },
+
+    /**
+     * Render a compact summary block for Previous/Updated data
+     * @private
+     */
+    _renderBreakdownSummary(label, breakdown) {
+        const data = breakdown || { rows: 0, totalSourceMinutes: 0, totalAppliedMinutes: 0 };
+        return `
+            <div class="card-summary-block">
+                <div class="summary-label">${label}</div>
+                <div class="summary-duration">${DateUtils.formatDuration(data.totalAppliedMinutes)}</div>
+                <div class="summary-meta">Rows: ${data.rows}</div>
+                <div class="summary-meta small">CSV Sum: ${DateUtils.formatDuration(data.totalSourceMinutes)}</div>
+            </div>
+        `;
+    },
+
+    /**
+     * Render detailed breakdown tables for testing/validation
+     * @private
+     */
+    _renderBreakdownDetails(prevBreakdown, updatedBreakdown, stateName) {
+        return `
+            <div class="card-details-header">
+                <strong>${stateName} breakdown</strong>
+                <span>This panel lists the rows contributing to the totals (testing view).</span>
+            </div>
+            <div class="card-details-grid">
+                ${this._renderDatasetDetails('Previous', prevBreakdown)}
+                ${this._renderDatasetDetails('Updated', updatedBreakdown)}
+            </div>
+        `;
+    },
+
+    /**
+     * Render dataset-specific table
+     * @private
+     */
+    _renderDatasetDetails(label, breakdown) {
+        const data = breakdown || { rows: 0, totalSourceMinutes: 0, totalAppliedMinutes: 0, entries: [] };
+        const formatDuration = (mins) => DateUtils.formatDuration(mins || 0);
+
+        if (data.rows === 0) {
+            return `
+                <div class="card-details-column">
+                    <h5>${label}</h5>
+                    <p class="details-empty">No rows for this dataset.</p>
+                </div>
+            `;
+        }
+
+        const maxRows = 20;
+        const rowsHtml = data.entries.slice(0, maxRows).map(entry => {
+            const source = Number.isFinite(entry.durationSourceMinutes) ? entry.durationSourceMinutes : 0;
+            const applied = Number.isFinite(entry.durationAppliedMinutes) ? entry.durationAppliedMinutes : source;
+            return `
+                <tr>
+                    <td>${entry.agent || '-'}</td>
+                    <td>${entry.date || entry.startESTDate || '-'}</td>
+                    <td>${entry.startESTTime || '-'} – ${entry.endESTTime || '-'}</td>
+                    <td>${formatDuration(source)}</td>
+                    <td>${formatDuration(applied)}</td>
+                    <td>${entry.wasClamped ? 'Yes' : 'No'}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const remaining = data.entries.length > maxRows
+            ? `<div class="details-note">Showing ${maxRows} of ${data.entries.length} rows…</div>`
+            : '';
+
+        return `
+            <div class="card-details-column">
+                <h5>${label}</h5>
+                <div class="details-stat-line">
+                    Rows: ${data.rows} • CSV Sum: ${formatDuration(data.totalSourceMinutes)} • Applied Sum: ${formatDuration(data.totalAppliedMinutes)}
+                </div>
+                <div class="details-table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Agent</th>
+                                <th>Date</th>
+                                <th>Time (EST)</th>
+                                <th>CSV</th>
+                                <th>Applied</th>
+                                <th>Clamped</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                        </tbody>
+                    </table>
+                </div>
+                ${remaining}
+            </div>
+        `;
     },
 
     /**
