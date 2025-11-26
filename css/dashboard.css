@@ -389,11 +389,11 @@
 
 .stat-card {
     background-color: var(--background);
-    padding: 0.875rem 1rem;
+    padding: 0.625rem 0.875rem;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-color);
-    min-width: 320px;
-    flex: 1 1 360px;
+    min-width: 0;
+    flex: 0 1 auto;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     display: flex;
     flex-direction: column;
@@ -425,14 +425,15 @@
 
 .card-breakdown-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.4rem;
+    margin-top: 0.25rem;
 }
 
 .card-summary-block {
     border: 1px dashed var(--border-color);
     border-radius: var(--radius-sm);
-    padding: 0.5rem;
+    padding: 0.4rem 0.5rem;
     background-color: var(--surface);
 }
 
@@ -444,9 +445,9 @@
 }
 
 .card-summary-block .summary-duration {
-    font-size: 1rem;
+    font-size: 0.9rem;
     font-weight: 600;
-    margin: 0.25rem 0;
+    margin: 0.2rem 0;
     color: var(--text-primary);
 }
 
@@ -461,14 +462,15 @@
 
 .details-toggle {
     align-self: flex-start;
-    padding: 0.35rem 0.75rem;
-    font-size: 0.8rem;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.75rem;
     border: 1px solid var(--primary-color);
     border-radius: var(--radius-sm);
     background-color: rgba(16, 88, 255, 0.08);
     color: var(--primary-color);
     cursor: pointer;
     transition: background-color 0.2s;
+    margin-top: 0.25rem;
 }
 
 .details-toggle:hover {
