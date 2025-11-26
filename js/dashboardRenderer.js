@@ -200,18 +200,82 @@ const DashboardRenderer = {
         columnTitle.textContent = title;
         column.appendChild(columnTitle);
 
-        // Filter state names to only include those with data
-        const statesWithData = stateNames.filter(stateName => {
-            // Check if state has data in any interval or in state totals
+        // Validate processedData
+        if (!processedData || !processedData.intervals || !processedData.stateTotals) {
+            const emptyMsg = document.createElement('div');
+            emptyMsg.className = 'empty-column-message';
+            emptyMsg.textContent = 'No data available for this schedule';
+            emptyMsg.style.cssText = 'text-align: center; padding: 2rem; color: var(--text-secondary); font-style: italic;';
+            column.appendChild(emptyMsg);
+            return column;
+        }
+
+        // Create a case-insensitive lookup map for state names in the data
+        const stateNameMap = new Map();
+        Object.keys(processedData.stateTotals || {}).forEach(key => {
+            stateNameMap.set(key.toLowerCase(), key);
+        });
+        (processedData.intervals || []).forEach(intervalData => {
+            if (intervalData && intervalData.states) {
+                Object.keys(intervalData.states).forEach(key => {
+                    if (!stateNameMap.has(key.toLowerCase())) {
+                        stateNameMap.set(key.toLowerCase(), key);
+                    }
+                });
+            }
+        });
+        
+        console.log(`[Dashboard] Creating column "${title}" with ${stateNames.length} configured states`);
+        console.log(`[Dashboard] Found ${stateNameMap.size} unique state names in filtered data:`, Array.from(stateNameMap.values()));
+
+        // First, try to match configured state names to data (case-insensitive)
+        const matchedStates = new Map(); // Maps configured state name -> actual data key
+        stateNames.forEach(configuredStateName => {
+            const normalized = configuredStateName.toLowerCase();
+            const dataKey = stateNameMap.get(normalized);
+            if (dataKey) {
+                matchedStates.set(configuredStateName, dataKey);
+            } else if (processedData.stateTotals[configuredStateName]) {
+                // Exact match fallback
+                matchedStates.set(configuredStateName, configuredStateName);
+            }
+        });
+        
+        // Build list of states to display - prefer configured state names, but use data state names if no match
+        const statesWithData = [];
+        const usedDataKeys = new Set();
+        
+        // Add matched configured states
+        matchedStates.forEach((dataKey, configuredName) => {
             const hasIntervalData = processedData.intervals.some(intervalData => {
-                const stateInfo = intervalData.states[stateName];
+                const stateInfo = intervalData.states[dataKey];
                 return stateInfo && (stateInfo.totalDuration > 0 || stateInfo.agentCount > 0);
             });
-            
-            const stateTotal = processedData.stateTotals[stateName];
+            const stateTotal = processedData.stateTotals[dataKey];
             const hasTotalData = stateTotal && (stateTotal.totalDuration > 0 || stateTotal.totalAgents > 0);
             
-            return hasIntervalData || hasTotalData;
+            if (hasIntervalData || hasTotalData) {
+                statesWithData.push(configuredName); // Use configured name for display
+                usedDataKeys.add(dataKey);
+            }
+        });
+        
+        // Add any remaining data states that weren't matched to configured states
+        // These are states in the filtered data that don't have exact configured matches
+        Object.keys(processedData.stateTotals || {}).forEach(dataStateName => {
+            if (!usedDataKeys.has(dataStateName)) {
+                const stateTotal = processedData.stateTotals[dataStateName];
+                const hasData = stateTotal && (stateTotal.totalDuration > 0 || stateTotal.totalAgents > 0);
+                if (hasData) {
+                    const hasIntervalData = processedData.intervals.some(intervalData => {
+                        const stateInfo = intervalData.states[dataStateName];
+                        return stateInfo && (stateInfo.totalDuration > 0 || stateInfo.agentCount > 0);
+                    });
+                    if (hasIntervalData || hasData) {
+                        statesWithData.push(dataStateName); // Use data state name
+                    }
+                }
+            }
         });
 
         // If no states have data, show empty message
@@ -267,9 +331,18 @@ const DashboardRenderer = {
             row.appendChild(timeCell);
 
             // State cells - only for states with data
+            // stateName might be a configured name or a data state name
             statesWithData.forEach(stateName => {
                 const stateCell = document.createElement('td');
-                const stateInfo = intervalData.states[stateName];
+                // Try to find the actual data key for this state name
+                let actualKey = matchedStates.get(stateName); // Check if it's a configured name with a match
+                if (!actualKey) {
+                    // It might be a data state name directly, or we need to look it up
+                    const normalizedName = stateName.toLowerCase();
+                    actualKey = stateNameMap.get(normalizedName) || stateName;
+                }
+                
+                const stateInfo = intervalData.states[actualKey] || null;
                 
                 if (stateInfo && (stateInfo.totalDuration > 0 || stateInfo.agentCount > 0)) {
                     stateCell.className = 'state-cell';
