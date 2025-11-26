@@ -1,6 +1,6 @@
 /**
- * Main Application
- * Orchestrates the dashboard functionality
+ * Main Application - Simple Version
+ * Orchestrates the dashboard functionality without schedule state filtering
  */
 
 const App = {
@@ -11,19 +11,16 @@ const App = {
     processedUpdated: null,
     filters: {
         teams: new Set(),
-        states: new Set(),
         categories: new Set(),
         groups: new Set()
     },
     filterOptions: {
         teams: [],
-        states: [],
         categories: [],
         groups: []
     },
     filterContainerIds: {
         teams: 'teamFilterOptions',
-        states: 'stateFilterOptions',
         categories: 'categoryFilterOptions',
         groups: 'groupFilterOptions'
     },
@@ -396,7 +393,6 @@ const App = {
         if (this._hasActiveFilters()) {
             console.log('App: Active filters detected', {
                 teams: Array.from(this.filters.teams),
-                states: Array.from(this.filters.states),
                 categories: Array.from(this.filters.categories),
                 groups: Array.from(this.filters.groups)
             });
@@ -598,15 +594,10 @@ const App = {
 
         const combined = [...this.previousScheduleData, ...this.updatedScheduleData];
         const teamSet = new Set();
-        const stateSet = new Set();
 
         combined.forEach(entry => {
             if (entry.team) {
                 teamSet.add(entry.team);
-            }
-            const normalizedState = StateConfig.findMatchingState(entry.scheduleState);
-            if (normalizedState) {
-                stateSet.add(normalizedState);
             }
         });
 
@@ -615,7 +606,6 @@ const App = {
 
         this.filterOptions = {
             teams: Array.from(teamSet).sort((a, b) => a.localeCompare(b)),
-            states: Array.from(stateSet).sort((a, b) => a.localeCompare(b)),
             categories: [...categories].sort((a, b) => a.localeCompare(b)),
             groups: [...groups].sort((a, b) => a.localeCompare(b))
         };
@@ -625,7 +615,6 @@ const App = {
             this.filters[key] = new Set(Array.from(this.filters[key]).filter(value => available.has(value)));
         };
         syncSelection('teams');
-        syncSelection('states');
         syncSelection('categories');
         syncSelection('groups');
 
@@ -639,7 +628,6 @@ const App = {
     _renderFilterOptions() {
         const filtersSection = document.getElementById('filtersSection');
         const hasOptions = this.filterOptions.teams.length > 0 ||
-                           this.filterOptions.states.length > 0 ||
                            this.filterOptions.categories.length > 0 ||
                            this.filterOptions.groups.length > 0;
         if (filtersSection) {
@@ -647,7 +635,6 @@ const App = {
         }
 
         this._renderCheckboxOptions('teams');
-        this._renderCheckboxOptions('states');
         this._renderCheckboxOptions('categories');
         this._renderCheckboxOptions('groups');
 
@@ -821,6 +808,7 @@ const App = {
 
     /**
      * Apply filters to dataset
+     * Schedule state filtering is disabled - only filter by category and group
      * @private
      */
     _applyFilters(dataset) {
@@ -842,9 +830,8 @@ const App = {
                 return false;
             }
 
-            if (this.filters.states.size && (!normalizedState || !this.filters.states.has(normalizedState))) {
-                return false;
-            }
+            // Schedule state filtering is disabled in simple dashboard
+            // Only filter by category and group
 
             if (this.filters.categories.size) {
                 if (!category || !this.filters.categories.has(category)) {
