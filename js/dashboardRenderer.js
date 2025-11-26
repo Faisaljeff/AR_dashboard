@@ -89,8 +89,56 @@ const DashboardRenderer = {
             console.log(`Dashboard Render: Updated data all states:`, Object.keys(updatedData.stateTotals || {}));
             
             // Filter data to only include states in this group
-            const filteredPrevious = DataProcessor.filterByStates(previousData, stateNames);
-            const filteredUpdated = DataProcessor.filterByStates(updatedData, stateNames);
+            // IMPORTANT: The stateNames are configured state names, which should match
+            // the normalized state names in processedData (from StateConfig.findMatchingState)
+            let filteredPrevious = DataProcessor.filterByStates(previousData, stateNames);
+            let filteredUpdated = DataProcessor.filterByStates(updatedData, stateNames);
+            
+            // ALSO include states from data that might belong to this group based on their category/group
+            // This handles cases where states don't match configured names exactly
+            const allDataStates = new Set([
+                ...Object.keys(previousData.stateTotals || {}),
+                ...Object.keys(updatedData.stateTotals || {})
+            ]);
+            
+            const additionalStates = [];
+            allDataStates.forEach(dataStateName => {
+                // Skip if already in stateNames
+                if (stateNames.some(s => s.toLowerCase() === dataStateName.toLowerCase())) {
+                    return;
+                }
+                
+                // Check if this state might belong to this group
+                // Try to find a matching state config by checking the state name
+                const stateConfig = StateConfig.getStateByName(dataStateName);
+                if (stateConfig && stateConfig.group === groupName) {
+                    additionalStates.push(dataStateName);
+                } else {
+                    // Also check if the state name contains keywords that match this group
+                    // This is a fallback for states that aren't configured but might belong
+                    const groupKeywords = groupName.toLowerCase().split(/[,\s]+/);
+                    const stateNameLower = dataStateName.toLowerCase();
+                    const matchesGroup = groupKeywords.some(keyword => 
+                        keyword.length > 3 && stateNameLower.includes(keyword)
+                    );
+                    if (matchesGroup) {
+                        additionalStates.push(dataStateName);
+                    }
+                }
+            });
+            
+            if (additionalStates.length > 0) {
+                console.log(`Dashboard Render: Found ${additionalStates.length} additional states for group "${groupName}":`, additionalStates);
+                // Merge additional states into filtered data
+                const allStatesForGroup = [...stateNames, ...additionalStates];
+                filteredPrevious = DataProcessor.filterByStates(previousData, allStatesForGroup);
+                filteredUpdated = DataProcessor.filterByStates(updatedData, allStatesForGroup);
+            }
+            
+            // Double-check: Log what states are actually in the filtered data
+            console.log(`Dashboard Render: After filtering for group "${groupName}":`);
+            console.log(`  - Previous filtered states:`, Object.keys(filteredPrevious.stateTotals || {}));
+            console.log(`  - Updated filtered states:`, Object.keys(filteredUpdated.stateTotals || {}));
 
             console.log(`Dashboard Render: Group "${groupName}" - Previous filtered states:`, Object.keys(filteredPrevious.stateTotals));
             console.log(`Dashboard Render: Group "${groupName}" - Updated filtered states:`, Object.keys(filteredUpdated.stateTotals));
@@ -104,7 +152,9 @@ const DashboardRenderer = {
                 console.log(`Dashboard Render: Group "${groupName}" has no data, but rendering empty dashboard since it's visible`);
             }
 
-            const dashboardSection = this._createDashboardSection(groupName, filteredPrevious, filteredUpdated, stateNames);
+            // Include both configured state names and additional states found in data
+            const allStateNamesForGroup = [...stateNames, ...additionalStates];
+            const dashboardSection = this._createDashboardSection(groupName, filteredPrevious, filteredUpdated, allStateNamesForGroup);
             container.appendChild(dashboardSection);
         });
 
@@ -228,16 +278,24 @@ const DashboardRenderer = {
         console.log(`[Dashboard] Creating column "${title}" with ${stateNames.length} configured states`);
         console.log(`[Dashboard] Found ${stateNameMap.size} unique state names in filtered data:`, Array.from(stateNameMap.values()));
 
+        // Create a set of valid state names for this group (case-insensitive)
+        const validStateNamesSet = new Set(stateNames.map(s => s.toLowerCase()));
+        
         // First, try to match configured state names to data (case-insensitive)
         const matchedStates = new Map(); // Maps configured state name -> actual data key
         stateNames.forEach(configuredStateName => {
             const normalized = configuredStateName.toLowerCase();
             const dataKey = stateNameMap.get(normalized);
             if (dataKey) {
-                matchedStates.set(configuredStateName, dataKey);
+                // Verify the data key is actually in our valid state names
+                if (validStateNamesSet.has(dataKey.toLowerCase())) {
+                    matchedStates.set(configuredStateName, dataKey);
+                }
             } else if (processedData.stateTotals[configuredStateName]) {
-                // Exact match fallback
-                matchedStates.set(configuredStateName, configuredStateName);
+                // Exact match fallback - verify it's in our valid list
+                if (validStateNamesSet.has(configuredStateName.toLowerCase())) {
+                    matchedStates.set(configuredStateName, configuredStateName);
+                }
             }
         });
         
@@ -268,8 +326,15 @@ const DashboardRenderer = {
         });
         
         // Add any remaining data states that weren't matched to configured states
-        // These are states in the filtered data that don't have exact configured matches
+        // BUT ONLY if they are in the stateNames list (i.e., belong to this group)
+        // This ensures we only show states that belong to this specific group/column
+        const stateNamesSet = new Set(stateNames.map(s => s.toLowerCase()));
         Object.keys(processedData.stateTotals || {}).forEach(dataStateName => {
+            // Only include if it's in the stateNames list for this group
+            if (!stateNamesSet.has(dataStateName.toLowerCase())) {
+                return; // Skip states that don't belong to this group
+            }
+            
             if (!usedDataKeys.has(dataStateName) && !usedDisplayNames.has(dataStateName.toLowerCase())) {
                 const stateTotal = processedData.stateTotals[dataStateName];
                 const hasData = stateTotal && (stateTotal.totalDuration > 0 || stateTotal.totalAgents > 0);
@@ -286,8 +351,41 @@ const DashboardRenderer = {
             }
         });
 
-        // If no states have data, show empty message
-        if (statesWithData.length === 0) {
+        // NOW: Group states by category instead of showing each state as a separate column
+        // This aggregates all states within the same category into a single column
+        const categoryMap = new Map(); // Maps category name -> { states: [...], displayName: "..." }
+        
+        statesWithData.forEach(stateName => {
+            // Find the category for this state
+            const stateConfig = StateConfig.getStateByName(stateName);
+            let category = stateConfig?.category || 'Other';
+            
+            // If no config found, try to infer category from state name
+            if (!stateConfig) {
+                const stateNameLower = stateName.toLowerCase();
+                if (stateNameLower.includes('break')) category = 'Break';
+                else if (stateNameLower.includes('meeting')) category = 'Meeting';
+                else if (stateNameLower.includes('training')) category = 'Training';
+                else if (stateNameLower.includes('coaching')) category = 'Coaching';
+                else if (stateNameLower.includes('time off') || stateNameLower.includes('paid')) category = 'Time Off';
+                else if (stateNameLower.includes('work')) category = 'Work';
+                else category = 'Other';
+            }
+            
+            if (!categoryMap.has(category)) {
+                categoryMap.set(category, {
+                    states: [],
+                    displayName: category
+                });
+            }
+            categoryMap.get(category).states.push(stateName);
+        });
+        
+        // Convert category map to array of categories to display
+        const categoriesWithData = Array.from(categoryMap.keys()).sort();
+
+        // If no categories have data, show empty message
+        if (categoriesWithData.length === 0) {
             const emptyMsg = document.createElement('div');
             emptyMsg.className = 'empty-column-message';
             emptyMsg.textContent = 'No data available for this schedule';
@@ -308,20 +406,20 @@ const DashboardRenderer = {
         const tbody = document.createElement('tbody');
         tbody.id = `tbody_${uniqueId}`;
 
-        // Build header
+        // Build header - one column per category
         const headerRow = document.createElement('tr');
         const timeHeader = document.createElement('th');
         timeHeader.textContent = 'Time';
         headerRow.appendChild(timeHeader);
 
-        statesWithData.forEach(stateName => {
-            const stateHeader = document.createElement('th');
-            stateHeader.className = 'state-header-cell';
-            stateHeader.innerHTML = `
-                <div class="state-header-name">${stateName}</div>
+        categoriesWithData.forEach(categoryName => {
+            const categoryHeader = document.createElement('th');
+            categoryHeader.className = 'state-header-cell';
+            categoryHeader.innerHTML = `
+                <div class="state-header-name">${categoryName}</div>
                 <div class="state-header-subtitle">Duration / Count</div>
             `;
-            headerRow.appendChild(stateHeader);
+            headerRow.appendChild(categoryHeader);
         });
 
         thead.appendChild(headerRow);
@@ -369,32 +467,60 @@ const DashboardRenderer = {
             timeCell.textContent = timeLabel;
             row.appendChild(timeCell);
 
-            // State cells - only for states with data
-            // stateName might be a configured name or a data state name
-            statesWithData.forEach(stateName => {
-                const stateCell = document.createElement('td');
-                // Try to find the actual data key for this state name
-                let actualKey = matchedStates.get(stateName); // Check if it's a configured name with a match
-                if (!actualKey) {
-                    // It might be a data state name directly, or we need to look it up
-                    const normalizedName = stateName.toLowerCase();
-                    actualKey = stateNameMap.get(normalizedName) || stateName;
-                }
+            // Category cells - aggregate all states within each category
+            categoriesWithData.forEach(categoryName => {
+                const categoryCell = document.createElement('td');
+                const categoryInfo = categoryMap.get(categoryName);
+                const statesInCategory = categoryInfo.states;
                 
-                const stateInfo = intervalData.states[actualKey] || null;
+                // Aggregate duration and agent count for all states in this category
+                let totalDuration = 0;
+                const uniqueAgents = new Set();
                 
-                if (stateInfo && (stateInfo.totalDuration > 0 || stateInfo.agentCount > 0)) {
-                    stateCell.className = 'state-cell';
-                    stateCell.innerHTML = `
-                        <div class="state-duration">${DateUtils.formatDuration(stateInfo.totalDuration)}</div>
-                        <div class="state-count">${stateInfo.agentCount} agents</div>
+                statesInCategory.forEach(stateName => {
+                    // Try to find the actual data key for this state name
+                    let actualKey = matchedStates.get(stateName);
+                    if (!actualKey) {
+                        const normalizedName = stateName.toLowerCase();
+                        actualKey = stateNameMap.get(normalizedName) || stateName;
+                    }
+                    
+                    const stateInfo = intervalData.states[actualKey];
+                    if (stateInfo) {
+                        totalDuration += stateInfo.totalDuration || 0;
+                        // Note: agentCount is already unique per interval, so we sum them
+                        // But we need to track unique agents across states in the category
+                        // For now, we'll sum the agent counts (this might double-count if same agent in multiple states)
+                        // TODO: Track unique agents per category if needed
+                    }
+                });
+                
+                // Also check state totals to get unique agent count
+                let totalAgents = 0;
+                statesInCategory.forEach(stateName => {
+                    let actualKey = matchedStates.get(stateName);
+                    if (!actualKey) {
+                        const normalizedName = stateName.toLowerCase();
+                        actualKey = stateNameMap.get(normalizedName) || stateName;
+                    }
+                    const stateInfo = intervalData.states[actualKey];
+                    if (stateInfo && stateInfo.agentCount) {
+                        totalAgents += stateInfo.agentCount;
+                    }
+                });
+                
+                if (totalDuration > 0 || totalAgents > 0) {
+                    categoryCell.className = 'state-cell';
+                    categoryCell.innerHTML = `
+                        <div class="state-duration">${DateUtils.formatDuration(totalDuration)}</div>
+                        <div class="state-count">${totalAgents} agents</div>
                     `;
                 } else {
-                    stateCell.className = 'state-cell-empty';
-                    stateCell.innerHTML = '<div class="empty-cell">-</div>';
+                    categoryCell.className = 'state-cell-empty';
+                    categoryCell.innerHTML = '<div class="empty-cell">-</div>';
                 }
                 
-                row.appendChild(stateCell);
+                row.appendChild(categoryCell);
             });
 
             tbody.appendChild(row);
@@ -415,42 +541,122 @@ const DashboardRenderer = {
         const summaryContainer = document.createElement('div');
         summaryContainer.className = 'summary-stats';
 
-        stateNames.forEach((stateName, idx) => {
-            const prev = previousData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
-            const updated = updatedData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
-            const prevBreakdown = this._buildStateBreakdown(previousData, stateName);
-            const updatedBreakdown = this._buildStateBreakdown(updatedData, stateName);
+        // Group states by category
+        const categoryMap = new Map();
+        stateNames.forEach(stateName => {
+            const stateConfig = StateConfig.getStateByName(stateName);
+            let category = stateConfig?.category || 'Other';
+            
+            // If no config found, try to infer category from state name
+            if (!stateConfig) {
+                const stateNameLower = stateName.toLowerCase();
+                if (stateNameLower.includes('break')) category = 'Break';
+                else if (stateNameLower.includes('meeting')) category = 'Meeting';
+                else if (stateNameLower.includes('training')) category = 'Training';
+                else if (stateNameLower.includes('coaching')) category = 'Coaching';
+                else if (stateNameLower.includes('time off') || stateNameLower.includes('paid')) category = 'Time Off';
+                else if (stateNameLower.includes('work')) category = 'Work';
+                else category = 'Other';
+            }
+            
+            if (!categoryMap.has(category)) {
+                categoryMap.set(category, []);
+            }
+            categoryMap.get(category).push(stateName);
+        });
+
+        // Create one card per category
+        Array.from(categoryMap.keys()).sort().forEach((categoryName, idx) => {
+            const statesInCategory = categoryMap.get(categoryName);
+            
+            // Aggregate totals for all states in this category
+            let prevTotalDuration = 0;
+            let prevTotalAgents = 0;
+            let updatedTotalDuration = 0;
+            let updatedTotalAgents = 0;
+            let prevTotalRows = 0;
+            let updatedTotalRows = 0;
+            let prevTotalSourceMinutes = 0;
+            let updatedTotalSourceMinutes = 0;
+            let prevTotalAppliedMinutes = 0;
+            let updatedTotalAppliedMinutes = 0;
+            
+            const prevAllEntries = [];
+            const updatedAllEntries = [];
+            
+            statesInCategory.forEach(stateName => {
+                const prev = previousData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
+                const updated = updatedData.stateTotals[stateName] || { totalDuration: 0, totalAgents: 0 };
+                
+                prevTotalDuration += prev.totalDuration || 0;
+                prevTotalAgents += prev.totalAgents || 0;
+                updatedTotalDuration += updated.totalDuration || 0;
+                updatedTotalAgents += updated.totalAgents || 0;
+                
+                const prevBreakdown = this._buildStateBreakdown(previousData, stateName);
+                const updatedBreakdown = this._buildStateBreakdown(updatedData, stateName);
+                
+                // Sum rows and minutes
+                prevTotalRows += prevBreakdown.rows || 0;
+                updatedTotalRows += updatedBreakdown.rows || 0;
+                prevTotalSourceMinutes += prevBreakdown.totalSourceMinutes || 0;
+                updatedTotalSourceMinutes += updatedBreakdown.totalSourceMinutes || 0;
+                prevTotalAppliedMinutes += prevBreakdown.totalAppliedMinutes || 0;
+                updatedTotalAppliedMinutes += updatedBreakdown.totalAppliedMinutes || 0;
+                
+                // Collect all entries
+                if (prevBreakdown.entries) {
+                    prevAllEntries.push(...prevBreakdown.entries);
+                }
+                if (updatedBreakdown.entries) {
+                    updatedAllEntries.push(...updatedBreakdown.entries);
+                }
+            });
             
             // Only show card if there's data in either prev or updated
-            const hasData = (prev.totalDuration > 0 || prev.totalAgents > 0) || 
-                           (updated.totalDuration > 0 || updated.totalAgents > 0);
+            const hasData = (prevTotalDuration > 0 || prevTotalAgents > 0) || 
+                           (updatedTotalDuration > 0 || updatedTotalAgents > 0);
             
             if (!hasData) {
                 return; // Skip this card
             }
             
-            const durationDiff = updated.totalDuration - prev.totalDuration;
-            const agentsDiff = updated.totalAgents - prev.totalAgents;
-            const detailsId = `state-details-${this._sanitizeId(stateName)}-${idx}`;
+            const durationDiff = updatedTotalDuration - prevTotalDuration;
+            const agentsDiff = updatedTotalAgents - prevTotalAgents;
+            const detailsId = `category-details-${this._sanitizeId(categoryName)}-${idx}`;
+
+            // Combine breakdowns for display
+            const combinedPrevBreakdown = {
+                rows: prevTotalRows,
+                totalSourceMinutes: prevTotalSourceMinutes,
+                totalAppliedMinutes: prevTotalAppliedMinutes,
+                entries: prevAllEntries
+            };
+            const combinedUpdatedBreakdown = {
+                rows: updatedTotalRows,
+                totalSourceMinutes: updatedTotalSourceMinutes,
+                totalAppliedMinutes: updatedTotalAppliedMinutes,
+                entries: updatedAllEntries
+            };
 
             const card = document.createElement('div');
             card.className = 'stat-card';
             card.innerHTML = `
-                <div class="stat-label">${stateName}</div>
+                <div class="stat-label">${categoryName}</div>
                 <div class="stat-value">
-                    Prev: ${DateUtils.formatDuration(prev.totalDuration)} (${prev.totalAgents} agents)<br>
-                    Updated: ${DateUtils.formatDuration(updated.totalDuration)} (${updated.totalAgents} agents)<br>
+                    Prev: ${DateUtils.formatDuration(prevTotalDuration)} (${prevTotalAgents} agents)<br>
+                    Updated: ${DateUtils.formatDuration(updatedTotalDuration)} (${updatedTotalAgents} agents)<br>
                     <small style="color: ${durationDiff >= 0 ? 'var(--success-color)' : 'var(--danger-color)'}">
                         Δ: ${durationDiff >= 0 ? '+' : ''}${DateUtils.formatDuration(durationDiff)} (${agentsDiff >= 0 ? '+' : ''}${agentsDiff} agents)
                     </small>
                 </div>
                 <div class="card-breakdown-summary">
-                    ${this._renderBreakdownSummary('Previous', prevBreakdown)}
-                    ${this._renderBreakdownSummary('Updated', updatedBreakdown)}
+                    ${this._renderBreakdownSummary('Previous', combinedPrevBreakdown)}
+                    ${this._renderBreakdownSummary('Updated', combinedUpdatedBreakdown)}
                 </div>
                 <button class="details-toggle" data-target="${detailsId}" type="button">Show details</button>
                 <div class="card-details" id="${detailsId}" hidden>
-                    ${this._renderBreakdownDetails(prevBreakdown, updatedBreakdown, stateName)}
+                    ${this._renderBreakdownDetails(combinedPrevBreakdown, combinedUpdatedBreakdown, categoryName)}
                 </div>
             `;
 

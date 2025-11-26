@@ -643,9 +643,16 @@ const DataProcessor = {
             }
         });
 
+        const filteredEntries = (processedData.processedEntries || []).filter(entry => {
+            if (!entry) return false;
+            const normalized = (entry.normalizedState || entry.scheduleState || '').toLowerCase();
+            return stateSet.has(normalized);
+        });
+
         return {
             intervals: filteredIntervals,
             stateTotals: filteredTotals,
+            processedEntries: filteredEntries,
             metadata: processedData.metadata
         };
     },
