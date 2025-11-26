@@ -244,9 +244,15 @@ const DashboardRenderer = {
         // Build list of states to display - prefer configured state names, but use data state names if no match
         const statesWithData = [];
         const usedDataKeys = new Set();
+        const usedDisplayNames = new Set(); // Track display names to prevent duplicates
         
         // Add matched configured states
         matchedStates.forEach((dataKey, configuredName) => {
+            // Skip if we've already added this display name
+            if (usedDisplayNames.has(configuredName.toLowerCase())) {
+                return;
+            }
+            
             const hasIntervalData = processedData.intervals.some(intervalData => {
                 const stateInfo = intervalData.states[dataKey];
                 return stateInfo && (stateInfo.totalDuration > 0 || stateInfo.agentCount > 0);
@@ -257,13 +263,14 @@ const DashboardRenderer = {
             if (hasIntervalData || hasTotalData) {
                 statesWithData.push(configuredName); // Use configured name for display
                 usedDataKeys.add(dataKey);
+                usedDisplayNames.add(configuredName.toLowerCase());
             }
         });
         
         // Add any remaining data states that weren't matched to configured states
         // These are states in the filtered data that don't have exact configured matches
         Object.keys(processedData.stateTotals || {}).forEach(dataStateName => {
-            if (!usedDataKeys.has(dataStateName)) {
+            if (!usedDataKeys.has(dataStateName) && !usedDisplayNames.has(dataStateName.toLowerCase())) {
                 const stateTotal = processedData.stateTotals[dataStateName];
                 const hasData = stateTotal && (stateTotal.totalDuration > 0 || stateTotal.totalAgents > 0);
                 if (hasData) {
@@ -273,6 +280,7 @@ const DashboardRenderer = {
                     });
                     if (hasIntervalData || hasData) {
                         statesWithData.push(dataStateName); // Use data state name
+                        usedDisplayNames.add(dataStateName.toLowerCase());
                     }
                 }
             }
@@ -320,14 +328,45 @@ const DashboardRenderer = {
         table.appendChild(thead);
         table.appendChild(tbody);
 
-        // Build body rows
-        processedData.intervals.forEach(intervalData => {
+        // Build body rows - ensure we only show valid 30-minute intervals (max 48)
+        // Filter out any corrupted or duplicate intervals
+        const validIntervals = (processedData.intervals || []).filter((intervalData, index) => {
+            if (!intervalData || !intervalData.interval) return false;
+            // Validate interval index and minutes
+            const interval = intervalData.interval;
+            if (interval.index !== undefined && interval.index !== index) {
+                console.warn(`[Dashboard] Interval index mismatch: expected ${index}, got ${interval.index}`);
+            }
+            // Ensure minutes are within valid range (0-1439)
+            if (interval.startMinutes !== undefined) {
+                if (interval.startMinutes < 0 || interval.startMinutes >= 1440) {
+                    console.warn(`[Dashboard] Invalid interval startMinutes: ${interval.startMinutes}`);
+                    return false;
+                }
+            }
+            return true;
+        }).slice(0, 48); // Limit to 48 intervals (one day)
+        
+        // If we have more than 48 intervals, something is wrong
+        if (processedData.intervals && processedData.intervals.length > 48) {
+            console.error(`[Dashboard] ERROR: Found ${processedData.intervals.length} intervals, expected max 48. Data may be corrupted.`);
+        }
+        
+        validIntervals.forEach((intervalData, index) => {
             const row = document.createElement('tr');
             
-            // Time cell
+            // Time cell - validate the label
             const timeCell = document.createElement('td');
             timeCell.className = 'interval-time';
-            timeCell.textContent = intervalData.interval.label;
+            let timeLabel = intervalData.interval.label;
+            // Validate time label format
+            if (!timeLabel || !timeLabel.match(/\d{1,2}:\d{2}\s*(AM|PM)/i)) {
+                // Regenerate label from index if corrupted
+                const startMinutes = index * 30;
+                timeLabel = DateUtils.minutesToTimeString(startMinutes);
+                console.warn(`[Dashboard] Invalid time label "${intervalData.interval.label}", regenerated to "${timeLabel}"`);
+            }
+            timeCell.textContent = timeLabel;
             row.appendChild(timeCell);
 
             // State cells - only for states with data
@@ -453,10 +492,33 @@ const DashboardRenderer = {
             return fallback;
         }
 
+        // Find the actual data state key for this state name
+        // stateName might be a configured name, but entries use the normalized state name from data
+        const stateNameLower = stateName.toLowerCase();
         const entries = processedData.processedEntries.filter(entry => {
             if (!entry) return false;
-            return (entry.normalizedState || entry.scheduleState || '').toLowerCase() === stateName.toLowerCase();
+            const entryState = (entry.normalizedState || entry.scheduleState || '').toLowerCase();
+            // Match case-insensitively
+            return entryState === stateNameLower;
         });
+        
+        // If no exact match, also check if this state name appears in stateTotals (might be a data state name)
+        if (entries.length === 0 && processedData.stateTotals) {
+            const matchingDataKey = Object.keys(processedData.stateTotals).find(key => 
+                key.toLowerCase() === stateNameLower
+            );
+            if (matchingDataKey) {
+                // Try matching with the actual data key
+                const entriesByKey = processedData.processedEntries.filter(entry => {
+                    if (!entry) return false;
+                    const entryState = (entry.normalizedState || entry.scheduleState || '').toLowerCase();
+                    return entryState === matchingDataKey.toLowerCase();
+                });
+                if (entriesByKey.length > 0) {
+                    entries.push(...entriesByKey);
+                }
+            }
+        }
 
         if (entries.length === 0) {
             return fallback;
