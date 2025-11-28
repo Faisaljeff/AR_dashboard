@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overtime Tracking - Site Wise Totals</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .overtime-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .upload-section {
+            background: var(--card-background);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow);
+        }
+        .upload-section h2 {
+            margin-top: 0;
+            margin-bottom: 1rem;
+        }
+        .file-input-wrapper {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .file-input-wrapper input[type="file"] {
+            flex: 1;
+            min-width: 200px;
+        }
+        .overtime-table-container {
+            background: var(--card-background);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            overflow-x: auto;
+        }
+        .overtime-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .overtime-table th,
+        .overtime-table td {
+            padding: 0.75rem;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+        .overtime-table th {
+            background: var(--primary-color);
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .overtime-table th.date-header {
+            background: var(--secondary-color);
+        }
+        .overtime-table td {
+            background: var(--background);
+        }
+        .overtime-table tr:nth-child(even) td {
+            background: var(--card-background);
+        }
+        .overtime-table tr:hover td {
+            background: var(--hover-background);
+        }
+        .site-column {
+            font-weight: 500;
+        }
+        .requirement-input {
+            width: 80px;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        .requirement-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.2);
+        }
+        .percentage-cell {
+            font-weight: 600;
+        }
+        .percentage-cell.positive {
+            color: var(--success-color);
+        }
+        .percentage-cell.negative {
+            color: var(--danger-color);
+        }
+        .total-row {
+            font-weight: 700;
+            background: var(--primary-color) !important;
+            color: white;
+        }
+        .total-row td {
+            background: var(--primary-color) !important;
+            color: white;
+        }
+        .loading-message {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+        .error-message {
+            background: var(--danger-color);
+            color: white;
+            padding: 1rem;
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+        }
+        .info-message {
+            background: var(--info-color, #e3f2fd);
+            color: var(--text-primary);
+            padding: 1rem;
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            border-left: 4px solid var(--primary-color);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>Overtime Tracking - Site Wise Totals</h1>
+            <nav>
+                <a href="index.html">Dashboard (Full)</a>
+                <a href="dashboard-simple.html">Dashboard (Simple)</a>
+                <a href="dashboard-latest.html">Latest Dashboard</a>
+                <a href="overtime-tracking.html" class="active">Overtime Tracking</a>
+                <a href="audit.html">Data Audit</a>
+                <a href="settings.html">Settings</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="overtime-container">
+            <div class="upload-section">
+                <h2>Upload Schedule File</h2>
+                <div class="file-input-wrapper">
+                    <input type="file" id="scheduleFileInput" accept=".csv" />
+                    <button class="btn btn-primary" id="processFileBtn" type="button">Process File</button>
+                    <button class="btn btn-secondary" id="clearDataBtn" type="button">Clear Data</button>
+                </div>
+                <small class="text-muted">Upload a CSV file with schedule data. The file should contain Site, Time zone, Team, Date, Schedule State, Start Time, End Time, and Duration columns.</small>
+            </div>
+
+            <div id="errorContainer"></div>
+            <div id="infoContainer"></div>
+
+            <div class="overtime-table-container" id="tableContainer" style="display: none;">
+                <h2>Overtime Totals by Site and Date (EST)</h2>
+                <div id="tableContent"></div>
+            </div>
+
+            <div id="loadingMessage" class="loading-message" style="display: none;">
+                Processing schedule data...
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Workforce Schedule Dashboard. All rights reserved.</p>
+    </footer>
+
+    <script src="lib/papaparse.min.js"></script>
+    <script src="js/dateUtils.js"></script>
+    <script src="js/overtimeApp.js"></script>
+</body>
+</html>
+
