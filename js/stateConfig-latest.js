@@ -4,6 +4,8 @@
  * This version includes conservative fuzzy matching to map CSV labels to configured states
  */
 
+console.log('[StateConfigLatest] Loading latest state config with fuzzy matching...');
+
 const StateConfigLatest = {
     STORAGE_KEY: 'scheduleConfig',
     CATEGORIES_KEY: 'scheduleCategories',
@@ -198,6 +200,11 @@ const StateConfigLatest = {
 
         const normalized = this._normalizeRaw(label);
         const allStates = this.getAllStates();
+        
+        // Debug: Log available states for troubleshooting
+        if (allStates.length === 0) {
+            console.warn('[StateConfigLatest] No configured states found in localStorage. Fuzzy matching will not work.');
+        }
 
         // First quick exception check
         const exceptionStateNames = Object.keys(this._MATCHING_EXCEPTIONS);
@@ -216,6 +223,7 @@ const StateConfigLatest = {
         const lc = label.toLowerCase();
         const exactMatch = allStates.find(s => s.name.toLowerCase() === lc);
         if (exactMatch) {
+            console.log(`[StateConfigLatest] Exact match: "${label}" → "${exactMatch.name}"`);
             return exactMatch.name;
         }
 
@@ -250,6 +258,7 @@ const StateConfigLatest = {
                     }
                 }
                 if (!hasException) {
+                    console.log(`[StateConfigLatest] Subset match: "${label}" → "${conf.name}" (tokens: ${Array.from(confTokens).join(', ')})`);
                     return conf.name;
                 }
             }
@@ -288,12 +297,13 @@ const StateConfigLatest = {
             const JACCARD_THRESHOLD = 0.20; // conservative; increase to 0.3-0.5 to be stricter
             // If the configured tokens are 1 token and it intersects, accept.
             if (jaccard >= JACCARD_THRESHOLD || confTokens.size === 1) {
+                console.log(`[StateConfigLatest] Score match: "${label}" → "${best.conf.name}" (inter: ${best.inter}, jaccard: ${jaccard.toFixed(3)})`);
                 return best.conf.name;
             }
         }
 
         // No safe match found — return original label unchanged
-        console.log(`State matching (Latest): "${stateName}" → No safe match found, using original label`);
+        console.log(`State matching (Latest): "${label}" → No safe match found, using original label`);
         return label;
     },
 
@@ -813,5 +823,6 @@ if (typeof window !== 'undefined') {
     // Also alias as StateConfig for compatibility with existing code
     // This allows dataProcessor.js and dashboardRenderer.js to work with the latest version
     window.StateConfig = StateConfigLatest;
+    console.log('[StateConfigLatest] Initialized and aliased as StateConfig. Available states:', StateConfigLatest.getAllStates().length);
 }
 

@@ -277,27 +277,72 @@ const DashboardRenderer = {
         
         console.log(`[Dashboard] Creating column "${title}" with ${stateNames.length} configured states`);
         console.log(`[Dashboard] Found ${stateNameMap.size} unique state names in filtered data:`, Array.from(stateNameMap.values()));
+        console.log(`[Dashboard] processedData.stateTotals keys:`, Object.keys(processedData.stateTotals || {}));
 
         // Create a set of valid state names for this group (case-insensitive)
         const validStateNamesSet = new Set(stateNames.map(s => s.toLowerCase()));
         
-        // First, try to match configured state names to data (case-insensitive)
+        // Defensive matchedStates construction with fallback matching
+        // This tries exact match, then substring/token match, and logs unmapped keys
+        const processedKeys = Object.keys(processedData.stateTotals || {});
+        const dataKeyMap = new Map(processedKeys.map(k => [k.toLowerCase(), k]));
+        
         const matchedStates = new Map(); // Maps configured state name -> actual data key
+        const missing = [];
+        
         stateNames.forEach(configuredStateName => {
-            const normalized = configuredStateName.toLowerCase();
-            const dataKey = stateNameMap.get(normalized);
-            if (dataKey) {
-                // Verify the data key is actually in our valid state names
+            const low = (configuredStateName || '').toLowerCase().trim();
+            
+            // 1) Exact key match (case-insensitive)
+            if (dataKeyMap.has(low)) {
+                const dataKey = dataKeyMap.get(low);
                 if (validStateNamesSet.has(dataKey.toLowerCase())) {
                     matchedStates.set(configuredStateName, dataKey);
-                }
-            } else if (processedData.stateTotals[configuredStateName]) {
-                // Exact match fallback - verify it's in our valid list
-                if (validStateNamesSet.has(configuredStateName.toLowerCase())) {
-                    matchedStates.set(configuredStateName, configuredStateName);
+                    return;
                 }
             }
+            
+            // 2) Direct processedData key equals configured name (rare)
+            if (processedData.stateTotals && processedData.stateTotals[configuredStateName]) {
+                if (validStateNamesSet.has(configuredStateName.toLowerCase())) {
+                    matchedStates.set(configuredStateName, configuredStateName);
+                    return;
+                }
+            }
+            
+            // 3) Substring/token fallback: try to find a processed key that contains the configured token(s)
+            let found = null;
+            for (const [kLow, kOrig] of dataKeyMap.entries()) {
+                // Check if it's in our valid state names
+                if (!validStateNamesSet.has(kOrig.toLowerCase())) {
+                    continue;
+                }
+                
+                // Simple substring match
+                if (kLow.includes(low) || low.includes(kLow)) {
+                    found = kOrig;
+                    break;
+                }
+                
+                // Token-wise more robust match
+                const confTokens = low.split(/\s+/).filter(Boolean);
+                const keyTokens = kLow.split(/\s+/).filter(Boolean);
+                const matches = confTokens.filter(t => keyTokens.includes(t));
+                if (matches.length > 0 && matches.length >= Math.min(1, confTokens.length)) {
+                    found = kOrig;
+                    break;
+                }
+            }
+            
+            if (found) {
+                matchedStates.set(configuredStateName, found);
+            } else {
+                missing.push(configuredStateName);
+            }
         });
+        
+        // Log summary so we can see which configured states did not find matches
+        console.log('[DASHBOARD_MATCHED_STATES] mapped:', Array.from(matchedStates.entries()).map(([k, v]) => `${k}→${v}`), 'missing:', missing);
         
         // Build list of states to display - prefer configured state names, but use data state names if no match
         const statesWithData = [];

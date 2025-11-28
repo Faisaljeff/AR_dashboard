@@ -46,7 +46,11 @@ const DataProcessor = {
         const dayOffStates = new Set(['Day Off', 'Time Off', 'DayOff', 'TimeOff']); // Common variations
         
         scheduleData.forEach((entry) => {
-            const stateName = StateConfig.findMatchingState(entry.scheduleState);
+            // Instrumentation: log CSV label -> matched configured state
+            const __rawLabel = entry.scheduleState;
+            const __matched = StateConfig.findMatchingState(__rawLabel);
+            console.log('[STATE_MATCH] raw=', JSON.stringify(__rawLabel), '=> matched=', JSON.stringify(__matched));
+            const stateName = __matched;
             const isFullDay = (entry.startTime && entry.startTime.trim().toUpperCase() === 'FULL DAY') ||
                              (entry.endTime && entry.endTime.trim().toUpperCase() === 'FULL DAY');
             
@@ -106,7 +110,11 @@ const DataProcessor = {
         let skippedCount = 0;
         scheduleData.forEach((entry, index) => {
             // Find matching state name (handles variations like "break- 10 minutes" → "Break")
-            const stateName = StateConfig.findMatchingState(entry.scheduleState);
+            // Instrumentation: log CSV label -> matched configured state
+            const __rawLabel = entry.scheduleState;
+            const __matched = StateConfig.findMatchingState(__rawLabel);
+            console.log('[STATE_MATCH] raw=', JSON.stringify(__rawLabel), '=> matched=', JSON.stringify(__matched));
+            const stateName = __matched;
             
             // Check if this agent has a Day Off (Full Day) - if so, exclude from all other states
             const isDayOffState = dayOffStates.has(stateName) || 
