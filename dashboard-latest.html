@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workforce Schedule Dashboard - Latest</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="container">
+            <h1>Workforce Schedule Dashboard - Latest</h1>
+            <nav>
+                <a href="index.html" class="nav-link">Dashboard (Full)</a>
+                <a href="dashboard-simple.html" class="nav-link">Dashboard (Simple)</a>
+                <a href="dashboard-latest.html" class="nav-link active">Latest Dashboard</a>
+                <a href="audit.html" class="nav-link">Data Audit</a>
+                <a href="settings.html" class="nav-link">Settings</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="controls-section">
+            <div class="date-selector-container">
+                <label for="datePicker">Select Date:</label>
+                <div class="date-navigation">
+                    <button type="button" id="prevDayBtn" class="btn btn-icon" title="Previous Day">
+                        <span style="font-size: 1.2rem;">←</span>
+                    </button>
+                    <input type="date" id="datePicker" class="date-input">
+                    <button type="button" id="nextDayBtn" class="btn btn-icon" title="Next Day">
+                        <span style="font-size: 1.2rem;">→</span>
+                    </button>
+                    <button type="button" id="todayBtn" class="btn btn-secondary" title="Go to Today">Today</button>
+                </div>
+                <button id="refreshDataBtn" class="btn btn-secondary">Refresh from Data Folder</button>
+                <button id="loadDataBtn" class="btn btn-primary">Upload Files Manually</button>
+            </div>
+            
+            <div class="file-upload-container">
+                <div class="file-upload-group">
+                    <label for="scheduleFile">Previous Schedule File:</label>
+                    <input type="file" id="scheduleFile" accept=".csv" class="file-input">
+                    <span class="file-name" id="scheduleFileName">No file selected</span>
+                    <small class="file-help">Auto-loads from: <code>data/Schedule_MMDDYYYY.csv</code></small>
+                </div>
+                <div class="file-upload-group">
+                    <label for="updatedFile">Updated Schedule File:</label>
+                    <input type="file" id="updatedFile" accept=".csv" class="file-input">
+                    <span class="file-name" id="updatedFileName">No file selected</span>
+                    <small class="file-help">Auto-loads from: <code>data/Updated_Schedule_MMDDYYYY.csv</code></small>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Filters Section -->
+        <section class="filters-section" id="filtersSection" style="display: none;">
+            <div class="filters-header">
+                <div>
+                    <h3>Dashboard Filters</h3>
+                    <p>Select one or more filters using the checkboxes below. Use "Select All" or "Clear" for quick changes.</p>
+                </div>
+                <div class="filters-actions">
+                    <button class="btn btn-secondary" id="clearFiltersBtn" type="button">Clear Filters</button>
+                </div>
+            </div>
+
+            <div class="filters-grid">
+                <div class="filter-card" data-filter="teams">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Teams</label>
+                            <small>Choose one or more teams</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link filter-select-all" data-filter-key="teams">Select All</button>
+                            <button type="button" class="btn btn-link filter-clear" data-filter-key="teams">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="teamFilterOptions"></div>
+                </div>
+
+                <div class="filter-card" data-filter="states">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Schedule States</label>
+                            <small>Filter by specific schedule states</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link filter-select-all" data-filter-key="states">Select All</button>
+                            <button type="button" class="btn btn-link filter-clear" data-filter-key="states">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="stateFilterOptions"></div>
+                </div>
+
+                <div class="filter-card" data-filter="categories">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Schedule State Type (Category)</label>
+                            <small>Breaks, meetings, training, etc.</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link filter-select-all" data-filter-key="categories">Select All</button>
+                            <button type="button" class="btn btn-link filter-clear" data-filter-key="categories">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="categoryFilterOptions"></div>
+                </div>
+
+                <div class="filter-card" data-filter="groups">
+                    <div class="filter-card-header">
+                        <div>
+                            <label>Schedule State Group</label>
+                            <small>Focus on specific dashboard groups</small>
+                        </div>
+                        <div class="filter-card-actions">
+                            <button type="button" class="btn btn-link filter-select-all" data-filter-key="groups">Select All</button>
+                            <button type="button" class="btn btn-link filter-clear" data-filter-key="groups">Clear</button>
+                        </div>
+                    </div>
+                    <div class="filter-options" id="groupFilterOptions"></div>
+                </div>
+            </div>
+
+            <small class="filter-hint">Filters apply immediately when you change a selection.</small>
+        </section>
+
+        <!-- Dashboard Toggle Bar -->
+        <section class="dashboard-toggle-bar" id="dashboardToggleBar" style="display: none;">
+            <div class="toggle-bar-header">
+                <div>
+                    <h3>Dashboard Visibility</h3>
+                    <p>Quickly show or hide entire dashboard groups.</p>
+                </div>
+                <div class="toggle-bar-actions">
+                    <button type="button" class="btn btn-secondary" id="showAllDashboardsBtn">Show All</button>
+                    <button type="button" class="btn btn-secondary" id="hideAllDashboardsBtn">Hide All</button>
+                </div>
+            </div>
+            <div class="dashboard-toggle-pills" id="dashboardTogglePills">
+                <!-- Pills injected dynamically -->
+            </div>
+        </section>
+
+        <section class="loading-section" id="loadingSection" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Processing schedule data...</p>
+        </section>
+
+        <section class="error-section" id="errorSection" style="display: none;">
+            <div class="error-message" id="errorMessage"></div>
+        </section>
+
+        <section class="dashboards-container" id="dashboardsContainer" style="display: none;">
+            <!-- Multiple dashboards will be dynamically inserted here, one per Schedule State Group -->
+        </section>
+    </main>
+
+    <footer class="main-footer">
+        <div class="container">
+            <p>&copy; 2025 Workforce Management Dashboard</p>
+        </div>
+    </footer>
+
+    <script src="lib/papaparse.min.js"></script>
+    <script src="js/dateUtils.js"></script>
+    <script src="js/stateConfig-latest.js"></script>
+    <script src="js/csvParser.js"></script>
+    <script src="js/dataProcessor.js"></script>
+    <script src="js/dashboardRenderer.js"></script>
+    <script src="js/app-latest.js"></script>
+</body>
+</html>
+
